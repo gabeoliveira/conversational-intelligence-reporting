@@ -1,0 +1,67 @@
+{
+  "operatorName": "sentiment",
+  "schemaVersion": "v1",
+  "display": {
+    "title": "Sentiment Analysis",
+    "icon": "sentiment_satisfied"
+  },
+  "table": {
+    "columns": [
+      {
+        "field": "overall_sentiment",
+        "label": "Sentiment",
+        "type": "badge",
+        "sortable": true
+      },
+      {
+        "field": "sentiment_score",
+        "label": "Score",
+        "type": "number",
+        "format": "+0.00",
+        "sortable": true
+      },
+      {
+        "field": "confidence",
+        "label": "Confidence",
+        "type": "number",
+        "format": "0%",
+        "sortable": true
+      }
+    ]
+  },
+  "detail": {
+    "sections": [
+      {
+        "title": "Overview",
+        "fields": ["overall_sentiment", "sentiment_score", "confidence"]
+      },
+      {
+        "title": "Key Phrases",
+        "field": "key_phrases",
+        "type": "tag-list"
+      },
+      {
+        "title": "Sentiment by Speaker",
+        "field": "sentiment_by_speaker",
+        "type": "key-value-table"
+      },
+      {
+        "title": "Sentiment Over Time",
+        "field": "sentiment_over_time",
+        "type": "timeline"
+      }
+    ]
+  },
+  "charts": [
+    {
+      "type": "pie",
+      "field": "overall_sentiment",
+      "title": "Sentiment Distribution"
+    },
+    {
+      "type": "line",
+      "field": "sentiment_over_time",
+      "title": "Sentiment Trend"
+    }
+  ]
+}

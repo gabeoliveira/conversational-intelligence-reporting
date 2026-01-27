@@ -1,0 +1,57 @@
+{
+  "operatorName": "summary",
+  "schemaVersion": "v1",
+  "display": {
+    "title": "Conversation Summary",
+    "icon": "summarize"
+  },
+  "table": {
+    "columns": [
+      {
+        "field": "summary",
+        "label": "Summary",
+        "type": "string"
+      },
+      {
+        "field": "outcome",
+        "label": "Outcome",
+        "type": "string"
+      },
+      {
+        "field": "follow_up_required",
+        "label": "Follow-up",
+        "type": "badge"
+      }
+    ]
+  },
+  "detail": {
+    "sections": [
+      {
+        "title": "Summary",
+        "fields": ["summary", "outcome"]
+      },
+      {
+        "title": "Key Points",
+        "field": "summary_bullets",
+        "type": "tag-list"
+      },
+      {
+        "title": "Topics Discussed",
+        "field": "topics_discussed",
+        "type": "tag-list"
+      },
+      {
+        "title": "Action Items",
+        "field": "action_items",
+        "type": "key-value-table"
+      }
+    ]
+  },
+  "charts": [
+    {
+      "type": "bar",
+      "field": "topics_discussed",
+      "title": "Most Discussed Topics"
+    }
+  ]
+}

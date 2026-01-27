@@ -1,0 +1,151 @@
+{
+  "operatorResults": [
+    {
+      "conversationId": "conv-001",
+      "operatorName": "sentiment",
+      "schemaVersion": "v1",
+      "data": {
+        "overall_sentiment": "positive",
+        "sentiment_score": 0.75,
+        "confidence": 0.92,
+        "key_phrases": ["great service", "helpful agent", "quick resolution"],
+        "sentiment_by_speaker": {
+          "customer": { "sentiment": "positive", "score": 0.8 },
+          "agent": { "sentiment": "positive", "score": 0.7 }
+        }
+      }
+    },
+    {
+      "conversationId": "conv-001",
+      "operatorName": "intent",
+      "schemaVersion": "v1",
+      "data": {
+        "primary_intent": "billing_inquiry",
+        "primary_intent_confidence": 0.89,
+        "all_intents": [
+          { "intent": "billing_inquiry", "confidence": 0.89 },
+          { "intent": "account_update", "confidence": 0.15 }
+        ],
+        "resolution_status": "resolved"
+      }
+    },
+    {
+      "conversationId": "conv-001",
+      "operatorName": "summary",
+      "schemaVersion": "v1",
+      "data": {
+        "summary": "Customer called to inquire about a charge on their latest bill. Agent explained the charge was for a premium service upgrade. Customer was satisfied with the explanation.",
+        "summary_bullets": [
+          "Customer questioned unexpected charge",
+          "Charge was for premium service upgrade",
+          "Customer confirmed they had requested the upgrade",
+          "Issue resolved without escalation"
+        ],
+        "topics_discussed": ["billing", "premium services", "account"],
+        "outcome": "Issue resolved - customer satisfied",
+        "follow_up_required": false
+      }
+    },
+    {
+      "conversationId": "conv-002",
+      "operatorName": "sentiment",
+      "schemaVersion": "v1",
+      "data": {
+        "overall_sentiment": "negative",
+        "sentiment_score": -0.45,
+        "confidence": 0.88,
+        "key_phrases": ["frustrated", "long wait", "not working"],
+        "sentiment_by_speaker": {
+          "customer": { "sentiment": "negative", "score": -0.6 },
+          "agent": { "sentiment": "neutral", "score": 0.1 }
+        }
+      }
+    },
+    {
+      "conversationId": "conv-002",
+      "operatorName": "intent",
+      "schemaVersion": "v1",
+      "data": {
+        "primary_intent": "technical_support",
+        "primary_intent_confidence": 0.95,
+        "all_intents": [
+          { "intent": "technical_support", "confidence": 0.95 },
+          { "intent": "complaint", "confidence": 0.45 }
+        ],
+        "resolution_status": "escalated"
+      }
+    },
+    {
+      "conversationId": "conv-003",
+      "operatorName": "sentiment",
+      "schemaVersion": "v1",
+      "data": {
+        "overall_sentiment": "positive",
+        "sentiment_score": 0.82,
+        "confidence": 0.91,
+        "key_phrases": ["interested", "good deal", "sign up"],
+        "sentiment_by_speaker": {
+          "customer": { "sentiment": "positive", "score": 0.85 },
+          "agent": { "sentiment": "positive", "score": 0.78 }
+        }
+      }
+    },
+    {
+      "conversationId": "conv-003",
+      "operatorName": "intent",
+      "schemaVersion": "v1",
+      "data": {
+        "primary_intent": "new_purchase",
+        "primary_intent_confidence": 0.92,
+        "all_intents": [
+          { "intent": "new_purchase", "confidence": 0.92 },
+          { "intent": "pricing_inquiry", "confidence": 0.35 }
+        ],
+        "resolution_status": "resolved"
+      }
+    },
+    {
+      "conversationId": "conv-004",
+      "operatorName": "sentiment",
+      "schemaVersion": "v1",
+      "data": {
+        "overall_sentiment": "neutral",
+        "sentiment_score": 0.1,
+        "confidence": 0.85,
+        "key_phrases": ["need help", "trying to understand", "okay"],
+        "sentiment_by_speaker": {
+          "customer": { "sentiment": "neutral", "score": 0.05 },
+          "agent": { "sentiment": "positive", "score": 0.3 }
+        }
+      }
+    },
+    {
+      "conversationId": "conv-005",
+      "operatorName": "sentiment",
+      "schemaVersion": "v1",
+      "data": {
+        "overall_sentiment": "positive",
+        "sentiment_score": 0.65,
+        "confidence": 0.90,
+        "key_phrases": ["thank you", "works now", "appreciate"],
+        "sentiment_by_speaker": {
+          "customer": { "sentiment": "positive", "score": 0.7 },
+          "agent": { "sentiment": "positive", "score": 0.6 }
+        }
+      }
+    },
+    {
+      "conversationId": "conv-005",
+      "operatorName": "intent",
+      "schemaVersion": "v1",
+      "data": {
+        "primary_intent": "technical_support",
+        "primary_intent_confidence": 0.88,
+        "all_intents": [
+          { "intent": "technical_support", "confidence": 0.88 }
+        ],
+        "resolution_status": "resolved"
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "A concise summary of the conversation"
+    },
+    "summary_bullets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key points from the conversation in bullet form"
+    },
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "assignee": {
+            "type": "string",
+            "enum": ["agent", "customer", "system"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "completed", "cancelled"]
+          }
+        },
+        "required": ["description"]
+      },
+      "description": "Action items identified from the conversation"
+    },
+    "topics_discussed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Main topics covered in the conversation"
+    },
+    "outcome": {
+      "type": "string",
+      "description": "The outcome or resolution of the conversation"
+    },
+    "follow_up_required": {
+      "type": "boolean",
+      "description": "Whether follow-up is needed"
+    }
+  },
+  "required": ["summary"]
+}

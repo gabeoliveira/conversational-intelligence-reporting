@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "intent-v1",
+  "title": "Intent Detection Operator",
+  "description": "Schema for intent detection results from Conversational Intelligence",
+  "type": "object",
+  "properties": {
+    "primary_intent": {
+      "type": "string",
+      "description": "The primary detected intent of the conversation"
+    },
+    "primary_intent_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score for the primary intent"
+    },
+    "all_intents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["intent", "confidence"]
+      },
+      "description": "All detected intents with confidence scores"
+    },
+    "intent_timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "trigger_phrase": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Timeline of intent changes during the conversation"
+    },
+    "resolution_status": {
+      "type": "string",
+      "enum": ["resolved", "unresolved", "escalated", "transferred"],
+      "description": "Whether the customer's intent was resolved"
+    }
+  },
+  "required": ["primary_intent"]
+}

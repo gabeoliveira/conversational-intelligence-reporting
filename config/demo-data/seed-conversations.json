@@ -1,0 +1,54 @@
+{
+  "conversations": [
+    {
+      "conversationId": "conv-001",
+      "customerKey": "cust-12345",
+      "channel": "voice",
+      "agentId": "agent-smith",
+      "teamId": "support-tier1",
+      "queueId": "queue-support",
+      "startedAt": "2024-01-15T10:30:00Z",
+      "endedAt": "2024-01-15T10:45:00Z"
+    },
+    {
+      "conversationId": "conv-002",
+      "customerKey": "cust-67890",
+      "channel": "chat",
+      "agentId": "agent-jones",
+      "teamId": "support-tier1",
+      "queueId": "queue-support",
+      "startedAt": "2024-01-15T11:00:00Z",
+      "endedAt": "2024-01-15T11:20:00Z"
+    },
+    {
+      "conversationId": "conv-003",
+      "customerKey": "cust-11111",
+      "channel": "voice",
+      "agentId": "agent-smith",
+      "teamId": "sales",
+      "queueId": "queue-sales",
+      "startedAt": "2024-01-15T14:00:00Z",
+      "endedAt": "2024-01-15T14:30:00Z"
+    },
+    {
+      "conversationId": "conv-004",
+      "customerKey": "cust-22222",
+      "channel": "sms",
+      "agentId": "agent-brown",
+      "teamId": "support-tier2",
+      "queueId": "queue-escalation",
+      "startedAt": "2024-01-15T15:30:00Z",
+      "endedAt": "2024-01-15T16:00:00Z"
+    },
+    {
+      "conversationId": "conv-005",
+      "customerKey": "cust-33333",
+      "channel": "voice",
+      "agentId": "agent-jones",
+      "teamId": "support-tier1",
+      "queueId": "queue-support",
+      "startedAt": "2024-01-16T09:00:00Z",
+      "endedAt": "2024-01-16T09:15:00Z"
+    }
+  ]
+}

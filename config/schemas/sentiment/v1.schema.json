@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sentiment-v1",
+  "title": "Sentiment Analysis Operator",
+  "description": "Schema for sentiment analysis results from Conversational Intelligence",
+  "type": "object",
+  "properties": {
+    "overall_sentiment": {
+      "type": "string",
+      "enum": ["positive", "neutral", "negative"],
+      "description": "The overall sentiment classification of the conversation"
+    },
+    "sentiment_score": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "Sentiment score from -1 (very negative) to 1 (very positive)"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score for the sentiment classification"
+    },
+    "key_phrases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key phrases that influenced the sentiment analysis"
+    },
+    "sentiment_by_speaker": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "sentiment": {
+            "type": "string",
+            "enum": ["positive", "neutral", "negative"]
+          },
+          "score": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          }
+        },
+        "required": ["sentiment", "score"]
+      },
+      "description": "Sentiment breakdown by speaker (agent, customer)"
+    },
+    "sentiment_over_time": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sentiment": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Sentiment changes throughout the conversation"
+    }
+  },
+  "required": ["overall_sentiment", "sentiment_score"]
+}

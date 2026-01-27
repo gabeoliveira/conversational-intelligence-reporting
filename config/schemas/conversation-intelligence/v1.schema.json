@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "conversation-intelligence-v1",
+  "title": "Conversation Intelligence Operator (All-in-One)",
+  "description": "Consolidated schema for sentiment, intent, and summary analysis from Conversational Intelligence. Note: Twilio will automatically set all fields as required and additionalProperties to false.",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "object",
+      "description": "Conversation summary with key details. Required field: paragraph",
+      "properties": {
+        "paragraph": {
+          "type": "string",
+          "description": "A concise paragraph summarizing the conversation (REQUIRED)"
+        },
+        "bullets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Key points from the conversation in bullet form (optional)"
+        },
+        "action_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "Description of the action item (REQUIRED for each item)"
+              },
+              "assignee": {
+                "type": "string",
+                "enum": ["agent", "customer", "system"],
+                "description": "Who is responsible for this action (optional)"
+              },
+              "deadline": {
+                "type": "string",
+                "description": "Deadline for completing the action item in ISO 8601 format (e.g., 2026-01-30T17:00:00Z) (optional)"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pending", "completed", "cancelled"],
+                "description": "Status of the action item (optional, defaults to pending)"
+              }
+            }
+          },
+          "description": "Action items identified from the conversation with deadlines and responsible parties (optional)"
+        },
+        "topics_discussed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Main topics covered in the conversation (optional)"
+        },
+        "outcome": {
+          "type": "string",
+          "description": "The outcome or resolution of the conversation (optional)"
+        },
+        "follow_up_required": {
+          "type": "boolean",
+          "description": "Whether follow-up is needed (optional)"
+        },
+        "next_best_action": {
+          "type": "string",
+          "description": "Recommended next action to take based on the conversation (optional)"
+        }
+      }
+    },
+    "sentiment": {
+      "type": "object",
+      "description": "Customer sentiment analysis. Required fields: overall, score",
+      "properties": {
+        "overall": {
+          "type": "string",
+          "enum": ["positive", "neutral", "negative"],
+          "description": "The overall customer sentiment classification (REQUIRED)"
+        },
+        "score": {
+          "type": "number",
+          "description": "Sentiment score from 0 (very negative) to 100 (very positive) (REQUIRED, must be between 0-100)"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Confidence score for the sentiment classification (optional, should be between 0-100 if provided)"
+        },
+        "key_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Key phrases that influenced the sentiment analysis (optional)"
+        },
+        "over_time": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "description": "Timestamp in ISO 8601 format (e.g., 2026-01-27T10:30:00Z)"
+              },
+              "sentiment": {
+                "type": "string",
+                "enum": ["positive", "neutral", "negative"],
+                "description": "Sentiment at this point in time"
+              },
+              "score": {
+                "type": "number",
+                "description": "Sentiment score at this point (0-100)"
+              }
+            }
+          },
+          "description": "Sentiment changes throughout the conversation with timestamps (optional)"
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "description": "Intent classification and resolution tracking. Required field: primary_intent",
+      "properties": {
+        "primary_intent": {
+          "type": "string",
+          "enum": ["scheduling", "cancellation", "problem", "other"],
+          "description": "The primary detected intent of the conversation (REQUIRED)"
+        },
+        "primary_confidence": {
+          "type": "number",
+          "description": "Confidence score for the primary intent (optional, should be between 0-100 if provided)"
+        },
+        "secondary_intents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "intent": {
+                "type": "string",
+                "enum": ["scheduling", "cancellation", "problem", "other"],
+                "description": "Secondary intent detected"
+              },
+              "confidence": {
+                "type": "number",
+                "description": "Confidence score for this intent (0-100)"
+              }
+            }
+          },
+          "description": "All detected secondary intents with confidence scores (optional)"
+        },
+        "intent_timeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "description": "Timestamp in ISO 8601 format (e.g., 2026-01-27T10:30:00Z)"
+              },
+              "intent": {
+                "type": "string",
+                "enum": ["scheduling", "cancellation", "problem", "other"],
+                "description": "Intent at this point in time"
+              },
+              "trigger_phrase": {
+                "type": "string",
+                "description": "Phrase that triggered this intent detection"
+              }
+            }
+          },
+          "description": "Timeline of intent changes during the conversation (optional)"
+        },
+        "resolution_status": {
+          "type": "string",
+          "enum": ["resolved", "unresolved", "escalated", "transferred"],
+          "description": "Whether the customer's intent was resolved (optional)"
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "Quality assessment for virtual and human agents. Required field: virtual_agent",
+      "properties": {
+        "virtual_agent": {
+          "type": "object",
+          "description": "Virtual agent quality metrics. Required field: quality_score",
+          "properties": {
+            "resolved_questions": {
+              "type": "boolean",
+              "description": "Whether the virtual agent successfully resolved customer questions (optional)"
+            },
+            "avoided_hallucinations": {
+              "type": "boolean",
+              "description": "Whether the virtual agent avoided making up information (optional)"
+            },
+            "avoided_repetitions": {
+              "type": "boolean",
+              "description": "Whether the virtual agent avoided unnecessary repetitions (optional)"
+            },
+            "resolved_without_human": {
+              "type": "boolean",
+              "description": "Whether the issue was resolved without human agent transfer (optional)"
+            },
+            "maintained_consistency": {
+              "type": "boolean",
+              "description": "Whether the virtual agent maintained consistent information (optional)"
+            },
+            "quality_score": {
+              "type": "number",
+              "description": "Overall quality score for virtual agent performance (REQUIRED, must be between 0-10, similar to CSAT)"
+            }
+          }
+        },
+        "human_agent": {
+          "type": "object",
+          "description": "Human agent quality metrics (optional, only populate if conversation was transferred to human)",
+          "properties": {
+            "was_transferred": {
+              "type": "boolean",
+              "description": "Whether the conversation was transferred to a human agent (optional)"
+            },
+            "resolved_questions": {
+              "type": "boolean",
+              "description": "Whether the human agent successfully resolved customer questions (optional)"
+            },
+            "was_cordial": {
+              "type": "boolean",
+              "description": "Whether the human agent maintained cordial and professional behavior (optional)"
+            },
+            "avoided_repetitions": {
+              "type": "boolean",
+              "description": "Whether the human agent avoided unnecessary repetitions (optional)"
+            },
+            "resolved_problem": {
+              "type": "boolean",
+              "description": "Whether the human agent resolved the customer's problem (optional)"
+            },
+            "clear_closing": {
+              "type": "boolean",
+              "description": "Whether the human agent provided a clear closing to the conversation (optional)"
+            },
+            "quality_score": {
+              "type": "number",
+              "description": "Overall quality score for human agent performance (optional, should be between 0-10 if provided, similar to CSAT)"
+            }
+          }
+        }
+      }
+    }
+  }
+}

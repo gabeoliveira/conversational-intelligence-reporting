@@ -1,0 +1,61 @@
+{
+  "operatorName": "intent",
+  "schemaVersion": "v1",
+  "display": {
+    "title": "Intent Detection",
+    "icon": "psychology"
+  },
+  "table": {
+    "columns": [
+      {
+        "field": "primary_intent",
+        "label": "Primary Intent",
+        "type": "string",
+        "sortable": true
+      },
+      {
+        "field": "primary_intent_confidence",
+        "label": "Confidence",
+        "type": "number",
+        "format": "0%",
+        "sortable": true
+      },
+      {
+        "field": "resolution_status",
+        "label": "Resolution",
+        "type": "badge",
+        "sortable": true
+      }
+    ]
+  },
+  "detail": {
+    "sections": [
+      {
+        "title": "Primary Intent",
+        "fields": ["primary_intent", "primary_intent_confidence", "resolution_status"]
+      },
+      {
+        "title": "All Detected Intents",
+        "field": "all_intents",
+        "type": "key-value-table"
+      },
+      {
+        "title": "Intent Timeline",
+        "field": "intent_timeline",
+        "type": "timeline"
+      }
+    ]
+  },
+  "charts": [
+    {
+      "type": "bar",
+      "field": "primary_intent",
+      "title": "Top Intents"
+    },
+    {
+      "type": "pie",
+      "field": "resolution_status",
+      "title": "Resolution Status"
+    }
+  ]
+}
