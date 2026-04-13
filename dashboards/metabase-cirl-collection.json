@@ -1,0 +1,465 @@
+{
+  "name": "CIRL - Conversational Intelligence",
+  "description": "Pre-built questions and dashboards for CIRL analytics using Athena Federated Query",
+  "version": "2.0",
+  "note": "All queries use federated query syntax. Replace placeholders: {{env}}, {{table_name}}, {{tenant_id}}",
+  "collection": {
+    "name": "CIRL Analytics",
+    "description": "Conversational Intelligence Reporting Layer analytics",
+    "color": "#509EE3"
+  },
+  "questions": [
+    {
+      "name": "Total Conversations (Last 30 Days)",
+      "description": "Count of all conversations in the last 30 days",
+      "display": "scalar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT SUM(value) as total_conversations\nFROM \"cirl_dynamo_{{env}}\".default.\"{{table_name}}\"\nWHERE PK LIKE 'TENANT#{{tenant_id}}#AGG#DAY'\n  AND regexp_extract(SK, 'METRIC#(.+)', 1) = 'conversation_count'\n  AND regexp_extract(SK, 'DAY#(\\\\d{8})', 1) >= format_datetime(current_date - interval '30' day, 'yyyyMMdd')",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "scalar.field": "total_conversations"
+      }
+    },
+    {
+      "name": "Average Sentiment Score",
+      "description": "Average sentiment score across all conversations",
+      "display": "gauge",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT AVG(value) as avg_sentiment\nFROM \"cirl_dynamo_{{env}}\".default.\"{{table_name}}\"\nWHERE PK LIKE 'TENANT#{{tenant_id}}#AGG#DAY'\n  AND regexp_extract(SK, 'METRIC#(.+)', 1) = 'sentiment_avg'\n  AND regexp_extract(SK, 'DAY#(\\\\d{8})', 1) >= format_datetime(current_date - interval '30' day, 'yyyyMMdd')",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "gauge.segments": [
+          {
+            "min": 0,
+            "max": 50,
+            "color": "#ED6E6E",
+            "label": "Negative"
+          },
+          {
+            "min": 50,
+            "max": 70,
+            "color": "#F9CF48",
+            "label": "Neutral"
+          },
+          {
+            "min": 70,
+            "max": 100,
+            "color": "#84BB4C",
+            "label": "Positive"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Daily Sentiment Trend",
+      "description": "Sentiment score trend over the last 30 days",
+      "display": "line",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  regexp_extract(SK, 'DAY#(\\\\d{8})', 1) as date_str,\n  AVG(value) as avg_sentiment\nFROM \"cirl_dynamo_{{env}}\".default.\"{{table_name}}\"\nWHERE PK LIKE 'TENANT#{{tenant_id}}#AGG#DAY'\n  AND regexp_extract(SK, 'METRIC#(.+)', 1) = 'sentiment_avg'\n  AND regexp_extract(SK, 'DAY#(\\\\d{8})', 1) >= format_datetime(current_date - interval '30' day, 'yyyyMMdd')\nGROUP BY regexp_extract(SK, 'DAY#(\\\\d{8})', 1)\nORDER BY regexp_extract(SK, 'DAY#(\\\\d{8})', 1)",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["date"],
+        "graph.metrics": ["avg_sentiment"],
+        "graph.y_axis.title_text": "Sentiment Score",
+        "line.interpolate": "cardinal"
+      }
+    },
+    {
+      "name": "Daily Conversation Volume",
+      "description": "Number of conversations per day",
+      "display": "bar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  date,\n  SUM(metric_value) as conversation_count\nFROM metrics_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND metric_name = 'conversation_count'\n  AND date >= current_date - interval '30' day\nGROUP BY date\nORDER BY date",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["date"],
+        "graph.metrics": ["conversation_count"],
+        "graph.y_axis.title_text": "Conversations"
+      }
+    },
+    {
+      "name": "Top 10 Operators by Usage",
+      "description": "Most frequently executed operators",
+      "display": "bar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  REPLACE(metric_name, 'operator_', '') as operator_name,\n  SUM(metric_value) as execution_count\nFROM metrics_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND metric_name LIKE 'operator_%_count'\n  AND date >= current_date - interval '30' day\nGROUP BY metric_name\nORDER BY execution_count DESC\nLIMIT 10",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["operator_name"],
+        "graph.metrics": ["execution_count"],
+        "graph.x_axis.title_text": "Execution Count"
+      }
+    },
+    {
+      "name": "Top Customers by Conversation Volume",
+      "description": "Customers with the most conversations",
+      "display": "table",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  customer_key,\n  COUNT(*) as conversation_count,\n  MAX(started_at) as last_contact\nFROM conversations_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND started_at >= current_date - interval '30' day\nGROUP BY customer_key\nORDER BY conversation_count DESC\nLIMIT 20",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "table.columns": [
+          {
+            "name": "customer_key",
+            "enabled": true,
+            "fieldRef": ["field", "customer_key", {"base-type": "type/Text"}]
+          },
+          {
+            "name": "conversation_count",
+            "enabled": true,
+            "fieldRef": ["field", "conversation_count", {"base-type": "type/Integer"}]
+          },
+          {
+            "name": "last_contact",
+            "enabled": true,
+            "fieldRef": ["field", "last_contact", {"base-type": "type/DateTime"}]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Recent Conversations",
+      "description": "Most recent conversations with details",
+      "display": "table",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  conversation_id,\n  started_at,\n  customer_key,\n  agent_id,\n  channel_type,\n  operator_count\nFROM conversations_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND started_at >= current_date - interval '7' day\nORDER BY started_at DESC\nLIMIT 50",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "table.columns": [
+          {
+            "name": "conversation_id",
+            "enabled": true
+          },
+          {
+            "name": "started_at",
+            "enabled": true
+          },
+          {
+            "name": "customer_key",
+            "enabled": true
+          },
+          {
+            "name": "agent_id",
+            "enabled": true
+          },
+          {
+            "name": "channel_type",
+            "enabled": true
+          },
+          {
+            "name": "operator_count",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "Transfer Rate Percentage",
+      "description": "Percentage of conversations transferred to human agent",
+      "display": "scalar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT AVG(metric_value) as transfer_rate\nFROM metrics_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND metric_name = 'transfer_rate_percent'\n  AND date >= current_date - interval '30' day",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "scalar.field": "transfer_rate",
+        "number.suffix": "%"
+      }
+    },
+    {
+      "name": "Virtual Agent Quality Score",
+      "description": "Average quality score for virtual agent interactions",
+      "display": "gauge",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT AVG(metric_value) as quality_score\nFROM metrics_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND metric_name = 'virtual_agent_quality_avg'\n  AND date >= current_date - interval '30' day",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "gauge.segments": [
+          {
+            "min": 0,
+            "max": 5,
+            "color": "#ED6E6E",
+            "label": "Poor"
+          },
+          {
+            "min": 5,
+            "max": 7,
+            "color": "#F9CF48",
+            "label": "Fair"
+          },
+          {
+            "min": 7,
+            "max": 10,
+            "color": "#84BB4C",
+            "label": "Good"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Channel Distribution",
+      "description": "Breakdown of conversations by channel type",
+      "display": "pie",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT\n  channel_type,\n  COUNT(*) as conversation_count\nFROM conversations_clean\nWHERE tenant_id = '{{tenant_id}}'\n  AND started_at >= current_date - interval '30' day\nGROUP BY channel_type\nORDER BY conversation_count DESC",
+          "template-tags": {
+            "tenant_id": {
+              "id": "tenant_id",
+              "name": "tenant_id",
+              "display-name": "Tenant ID",
+              "type": "text",
+              "required": true,
+              "default": "your-tenant-id"
+            }
+          }
+        },
+        "database": "{{ATHENA_DATABASE_ID}}"
+      },
+      "visualization_settings": {
+        "pie.dimension": "channel_type",
+        "pie.metric": "conversation_count"
+      }
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "CIRL Overview Dashboard",
+      "description": "High-level overview of conversational intelligence metrics",
+      "parameters": [
+        {
+          "id": "tenant_id",
+          "name": "Tenant ID",
+          "type": "text",
+          "default": "your-tenant-id"
+        }
+      ],
+      "cards": [
+        {
+          "row": 0,
+          "col": 0,
+          "sizeX": 4,
+          "sizeY": 3,
+          "card_id": 1,
+          "visualization_settings": {}
+        },
+        {
+          "row": 0,
+          "col": 4,
+          "sizeX": 4,
+          "sizeY": 3,
+          "card_id": 2,
+          "visualization_settings": {}
+        },
+        {
+          "row": 0,
+          "col": 8,
+          "sizeX": 4,
+          "sizeY": 3,
+          "card_id": 8,
+          "visualization_settings": {}
+        },
+        {
+          "row": 0,
+          "col": 12,
+          "sizeX": 4,
+          "sizeY": 3,
+          "card_id": 9,
+          "visualization_settings": {}
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 3,
+          "visualization_settings": {}
+        },
+        {
+          "row": 3,
+          "col": 8,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 4,
+          "visualization_settings": {}
+        },
+        {
+          "row": 9,
+          "col": 0,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 5,
+          "visualization_settings": {}
+        },
+        {
+          "row": 9,
+          "col": 8,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 10,
+          "visualization_settings": {}
+        },
+        {
+          "row": 15,
+          "col": 0,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 6,
+          "visualization_settings": {}
+        },
+        {
+          "row": 15,
+          "col": 8,
+          "sizeX": 8,
+          "sizeY": 6,
+          "card_id": 7,
+          "visualization_settings": {}
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "This is a Metabase collection export template for CIRL analytics.",
+    "",
+    "Before importing:",
+    "1. Set up your Athena connection in Metabase (see docs/06-bi-integration.md)",
+    "2. Create the Athena views (metrics_clean, conversations_clean, operators_clean)",
+    "3. Replace {{ATHENA_DATABASE_ID}} with your Metabase database ID for Athena",
+    "4. Replace 'your-tenant-id' with your actual tenant ID in all queries",
+    "",
+    "To import:",
+    "1. Go to Admin → Tools → Import in Metabase",
+    "2. Upload this JSON file",
+    "3. The collection will be created with all questions and dashboards",
+    "",
+    "Note: Metabase's import/export format may vary by version.",
+    "This template is compatible with Metabase v0.40+.",
+    "You may need to manually recreate questions if import fails."
+  ]
+}

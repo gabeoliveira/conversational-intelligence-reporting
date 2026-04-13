@@ -70,6 +70,37 @@ export async function writeConversation(params: WriteConversationParams): Promis
     gsiAttributes.GSI3SK = gsiKeys.gsi3SK(timestamp);
   }
 
+  // First, get existing payload to preserve data across updates
+  let existingPayload: Record<string, unknown> = {};
+  try {
+    const existing = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: keys.conversationPK(tenantId),
+          SK: keys.conversationSK(timestamp, conversationId),
+        },
+        ProjectionExpression: 'payload',
+      })
+    );
+    if (existing.Item?.payload) {
+      existingPayload = JSON.parse(existing.Item.payload as string);
+    }
+  } catch (error) {
+    // Item doesn't exist yet, that's fine
+  }
+
+  // Build payload with entity-specific attributes (spine + payload pattern)
+  const payload = {
+    ...existingPayload,
+    customerKey: metadata.customerKey || null,
+    channel: metadata.channel || 'unknown',
+    agentId: metadata.agentId || null,
+    teamId: metadata.teamId || null,
+    queueId: metadata.queueId || null,
+    operatorCount: (existingPayload.operatorCount as number || 0) + 1,
+  };
+
   // Use UpdateCommand to create or update conversation header
   await docClient.send(
     new UpdateCommand({
@@ -81,31 +112,20 @@ export async function writeConversation(params: WriteConversationParams): Promis
       UpdateExpression: `
         SET conversationId = :conversationId,
             tenantId = :tenantId,
-            customerKey = :customerKey,
-            channel = :channel,
-            agentId = :agentId,
-            teamId = :teamId,
-            queueId = :queueId,
             startedAt = if_not_exists(startedAt, :receivedAt),
             updatedAt = :now,
             createdAt = if_not_exists(createdAt, :now),
-            operatorCount = if_not_exists(operatorCount, :zero) + :one,
-            entityType = :entityType
+            entityType = :entityType,
+            payload = :payload
             ${Object.keys(gsiAttributes).length > 0 ? ', ' + Object.keys(gsiAttributes).map(k => `${k} = :${k}`).join(', ') : ''}
       `,
       ExpressionAttributeValues: {
         ':conversationId': conversationId,
         ':tenantId': tenantId,
-        ':customerKey': metadata.customerKey || null,
-        ':channel': metadata.channel || 'unknown',
-        ':agentId': metadata.agentId || null,
-        ':teamId': metadata.teamId || null,
-        ':queueId': metadata.queueId || null,
         ':receivedAt': receivedAt,
         ':now': now,
-        ':zero': 0,
-        ':one': 1,
         ':entityType': 'CONVERSATION',
+        ':payload': JSON.stringify(payload),
         ...Object.fromEntries(Object.entries(gsiAttributes).map(([k, v]) => [`:${k}`, v])),
       },
     })
@@ -141,6 +161,15 @@ export async function writeOperatorResult(params: WriteOperatorResultParams): Pr
 
   const timestamp = formatTimestamp(new Date(receivedAt));
 
+  // Build payload with entity-specific attributes (spine + payload pattern)
+  const payload = {
+    s3Uri,
+    displayFields,
+    enrichedPayload,
+    enrichedAt,
+    enrichmentError,
+  };
+
   await docClient.send(
     new PutCommand({
       TableName: TABLE_NAME,
@@ -151,13 +180,9 @@ export async function writeOperatorResult(params: WriteOperatorResultParams): Pr
         tenantId,
         operatorName,
         schemaVersion,
-        s3Uri,
-        displayFields,
-        enrichedPayload,
-        enrichedAt,
-        enrichmentError,
         receivedAt,
         entityType: 'OPERATOR_RESULT',
+        payload: JSON.stringify(payload),
       },
     })
   );
@@ -339,12 +364,97 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
   }
 }
 
+/**
+ * Aggregate timing metrics from transcript sentences.
+ * These are computed by the ingest Lambda from Twilio sentence data and passed
+ * through EventBridge metadata. We track sums and counts for averaging in the API.
+ *
+ * Metrics produced:
+ *   handling_time_sum / handling_time_count  → avg_handling_time_sec
+ *   response_time_sum / response_time_count  → avg_response_time_sec
+ *   customer_wait_time_sum / customer_wait_time_count → avg_customer_wait_time_sec
+ */
+interface UpdateTimingAggregatesParams {
+  tenantId: string;
+  timingMetrics: Record<string, number>;
+  receivedAt: string;
+}
+
+export async function updateTimingAggregates(params: UpdateTimingAggregatesParams): Promise<void> {
+  const { tenantId, timingMetrics, receivedAt } = params;
+  const date = formatDate(new Date(receivedAt));
+
+  const {
+    handlingTimeSec,
+    avgResponseTimeSec,
+    avgCustomerWaitTimeSec,
+    sentenceCount,
+    agentSentenceCount,
+    customerSentenceCount,
+  } = timingMetrics;
+
+  // Handling time (total conversation duration)
+  if (typeof handlingTimeSec === 'number' && handlingTimeSec > 0) {
+    await incrementMetric(tenantId, date, 'handling_time_sum', handlingTimeSec);
+    await incrementMetric(tenantId, date, 'handling_time_count', 1);
+  }
+
+  // Agent response time (time from customer utterance end → agent response start)
+  if (typeof avgResponseTimeSec === 'number' && avgResponseTimeSec > 0) {
+    await incrementMetric(tenantId, date, 'response_time_sum', avgResponseTimeSec);
+    await incrementMetric(tenantId, date, 'response_time_count', 1);
+  }
+
+  // Customer wait time (time from agent utterance end → customer response start)
+  if (typeof avgCustomerWaitTimeSec === 'number' && avgCustomerWaitTimeSec > 0) {
+    await incrementMetric(tenantId, date, 'customer_wait_time_sum', avgCustomerWaitTimeSec);
+    await incrementMetric(tenantId, date, 'customer_wait_time_count', 1);
+  }
+
+  // Sentence counts
+  if (typeof sentenceCount === 'number') {
+    await incrementMetric(tenantId, date, 'sentence_count_total', sentenceCount);
+  }
+  if (typeof agentSentenceCount === 'number') {
+    await incrementMetric(tenantId, date, 'agent_sentence_count', agentSentenceCount);
+  }
+  if (typeof customerSentenceCount === 'number') {
+    await incrementMetric(tenantId, date, 'customer_sentence_count', customerSentenceCount);
+  }
+}
+
 async function incrementMetric(
   tenantId: string,
   date: string,
   metricName: string,
   increment: number
 ): Promise<void> {
+  // First, get existing payload to preserve data
+  let currentValue = 0;
+  try {
+    const existing = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: keys.aggregatePK(tenantId),
+          SK: keys.aggregateSK(date, metricName),
+        },
+        ProjectionExpression: 'payload',
+      })
+    );
+    if (existing.Item?.payload) {
+      const existingPayload = JSON.parse(existing.Item.payload as string);
+      currentValue = existingPayload.value || 0;
+    }
+  } catch (error) {
+    // Item doesn't exist yet, that's fine
+  }
+
+  // Build payload with the new value (spine + payload pattern)
+  const payload = {
+    value: currentValue + increment,
+  };
+
   await docClient.send(
     new UpdateCommand({
       TableName: TABLE_NAME,
@@ -352,18 +462,16 @@ async function incrementMetric(
         PK: keys.aggregatePK(tenantId),
         SK: keys.aggregateSK(date, metricName),
       },
-      UpdateExpression: 'SET #value = if_not_exists(#value, :zero) + :increment, entityType = :entityType, metricName = :metricName, #date = :date, tenantId = :tenantId',
+      UpdateExpression: 'SET entityType = :entityType, metricName = :metricName, #date = :date, tenantId = :tenantId, payload = :payload',
       ExpressionAttributeNames: {
-        '#value': 'value',
         '#date': 'date',
       },
       ExpressionAttributeValues: {
-        ':zero': 0,
-        ':increment': increment,
         ':entityType': 'AGGREGATE',
         ':metricName': metricName,
         ':date': date,
         ':tenantId': tenantId,
+        ':payload': JSON.stringify(payload),
       },
     })
   );

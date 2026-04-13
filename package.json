@@ -10,6 +10,7 @@
     "deploy": "cd infra/cdk && npm run deploy",
     "deploy:dev": "cd infra/cdk && npm run deploy -- --context env=dev",
     "deploy:demo": "cd infra/cdk && npm run deploy -- --context env=demo",
+    "deploy:poc": "cd infra/cdk && npm run deploy -- --context env=poc",
     "destroy": "cd infra/cdk && npm run destroy",
     "demo:seed": "npx ts-node scripts/seed-demo-data.ts",
     "demo:replay": "npx ts-node scripts/replay-webhooks.ts"

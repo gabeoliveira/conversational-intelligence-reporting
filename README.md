@@ -6,12 +6,28 @@ Transform Twilio Conversational Intelligence operator results into a queryable d
 
 - **Webhook ingestion** with Twilio signature validation and async processing
 - **REST API** for conversations, metrics, and operator results
+- **SQL query layer** via Athena for standard BI tools (simple or lakehouse mode)
+- **BI-agnostic design** - Connect QuickSight, Tableau, PowerBI, Looker, Grafana, Metabase
 - **Automatic metrics aggregation** at ingestion-time
-- **BI tool integration** - Connect QuickSight, Tableau, Looker, or Power BI
 - **Multi-tenant support** with flexible schema validation
 - **Demo mode** with sample data for quick evaluation
 
-## Architecture
+## Choose Your Analytics Mode
+
+CIRL supports two analytics modes. Both share the same ingestion pipeline, REST API, and DynamoDB storage. They differ in how BI tools query the data via Athena.
+
+| | **Simple** (default) | **Lakehouse** |
+|---|---|---|
+| **How BI tools query** | Athena → DynamoDB (federated query) | Athena → S3 Parquet (Glue ETL) |
+| **Data freshness** | Real-time (queries live DynamoDB) | Batch (depends on ETL schedule) |
+| **Query cost** | Higher ($, Lambda + DynamoDB RCUs per query) | Lower ($$, Parquet is columnar) |
+| **Operational overhead** | None — deploy and go | Must run Glue ETL jobs |
+| **Best for** | <100K conversations/month, getting started | >100K conversations/month, heavy analytics |
+| **Set in `.env`** | `CIRL_ANALYTICS=simple` | `CIRL_ANALYTICS=lakehouse` |
+
+You can start with `simple` and switch to `lakehouse` later without losing data.
+
+### Architecture
 
 ```
 ┌─────────────┐
@@ -32,33 +48,41 @@ Transform Twilio Conversational Intelligence operator results into a queryable d
 │  Processor Lambda                               │
 │  • Schema validation                            │
 │  • Custom enrichment hooks                      │
-│  • Writes to DynamoDB                           │
+│  • Writes to DynamoDB (single table)            │
 │  • Calculates aggregate metrics                 │
 └──────┬──────────────────────────────────────────┘
        │
-       v
-┌─────────────────────────────────────────────────┐
-│  DynamoDB (Single-table design)                 │
-│  • Conversations + Operator Results             │
-│  • Daily aggregate metrics                      │
-│  • GSIs for agent/queue/customer filtering      │
-└──────┬──────────────────────────────────────────┘
-       │
-       v
-┌─────────────────────────────────────────────────┐
-│  Dashboard API (REST)                           │
-│  • List/filter conversations                    │
-│  • Get conversation + operator results          │
-│  • Query aggregate metrics                      │
-└──────┬──────────────────────────────────────────┘
-       │
-       v
-┌─────────────────────────────────────────────────┐
-│  Your Choice:                                   │
-│  • BI Tool (QuickSight, Tableau, etc.)         │
-│  • Custom Dashboard                             │
-│  • Flex Plugin                                  │
-└─────────────────────────────────────────────────┘
+       ├──────────────────────────────┐
+       v                              v
+┌──────────────────────┐    ┌──────────────────┐
+│  DynamoDB            │    │  Raw S3 Bucket   │
+│  (Single Table)      │    │  (JSON archive)  │
+│  • Conversations     │    └──────┬───────────┘
+│  • Operator Results  │           │
+│  • Metrics           │           │
+└──────┬───────────────┘           │
+       │                           │
+       ├──── REST API ────┐        │
+       │                  │        │
+       │   ┌──────────────┤        │
+       │   │  SIMPLE MODE │        │   LAKEHOUSE MODE
+       │   │              │        │
+       v   v              │        v
+┌──────────────┐   ┌──────┴───┐  ┌──────────────────┐
+│ Grafana,     │   │ Athena   │  │ Glue ETL         │
+│ Metabase,    │   │ DynamoDB │  │ Bronze→Silver    │
+│ Custom Apps  │   │ Connector│  │ Silver→Gold      │
+└──────────────┘   │ (federate│  └──────┬───────────┘
+                   │  d query)│         v
+                   └──────┬───┘  ┌──────────────────┐
+                          │      │ S3 Parquet +     │
+                          │      │ Athena           │
+                          v      └──────┬───────────┘
+                   ┌─────────────┐      │
+                   │ QuickSight, │◄─────┘
+                   │ Tableau,    │
+                   │ PowerBI     │
+                   └─────────────┘
 ```
 
 ## Quick Start
@@ -81,6 +105,10 @@ Edit `.env`:
 AWS_REGION=us-east-1
 CIRL_ENV=demo
 CIRL_TENANT_ID=your-tenant-id
+
+# Analytics mode: simple (default) or lakehouse
+# Start with simple — you can switch to lakehouse later
+# CIRL_ANALYTICS=simple
 
 TWILIO_ACCOUNT_SID=ACxxx...
 TWILIO_AUTH_TOKEN=xxx...
@@ -238,17 +266,60 @@ GET /tenants/{tenantId}/schemas/{operatorName}/versions/{version}
 
 ## BI Tool Integration
 
-The API is designed for direct integration with BI tools. See integration guides:
+CIRL is BI-agnostic. SQL-based BI tools connect via Athena; API-based tools connect via REST.
 
-- **[AWS QuickSight](docs/bi-integration.md#quicksight)** - Native AWS integration
-- **[Tableau](docs/bi-integration.md#tableau)** - Web Data Connector
-- **[Looker](docs/bi-integration.md#looker)** - API-backed models
-- **[Power BI](docs/bi-integration.md#power-bi)** - REST connector
+### SQL-Based BI Tools (QuickSight, Tableau, PowerBI, Looker)
 
-**Quick Example (QuickSight):**
-1. Create new data source → API
-2. Enter API URL: `https://your-api-url/v1/tenants/your-tenant/metrics`
-3. Build visualizations with drag-and-drop
+How you query depends on your analytics mode:
+
+#### Simple Mode (default)
+
+Athena queries DynamoDB directly via federated query. No ETL to manage.
+
+```sql
+-- Connect to catalog: cirl_dynamo_{env}, database: default, table: cirl-{env}
+SELECT conversationId, tenantId, startedAt, payload
+FROM "cirl_dynamo_demo"."default"."cirl-demo"
+WHERE PK = 'TENANT#demo#CONV'
+  AND entityType = 'CONVERSATION'
+LIMIT 10
+```
+
+#### Lakehouse Mode
+
+Athena queries optimized S3 Parquet tables. Clean schemas, no PK/SK parsing.
+
+```sql
+-- Connect to database: cirl_{env}
+SELECT conversation_id, customer_key, agent_id, started_at
+FROM cirl_demo.lakehouse_conversations
+WHERE tenant_id = 'demo'
+  AND year = '2026' AND month = '01'
+LIMIT 10
+```
+
+### REST API (Grafana, Metabase, Custom Dashboards)
+
+Direct API access — works the same in both analytics modes.
+
+**See [docs/06-bi-integration.md](docs/06-bi-integration.md) for complete setup guides.**
+
+**Quick Example (QuickSight — Simple Mode):**
+1. In QuickSight, create new dataset → select **Athena**
+2. Workgroup: `cirl-demo`
+3. Catalog: `cirl_dynamo_demo`, Database: `default`, Table: `cirl-demo`
+4. Use Custom SQL to filter by entity type
+5. Build visualizations with drag-and-drop
+
+### Sample Dashboards
+
+Ready-to-use dashboard templates are available in [`dashboards/`](dashboards/):
+- **Grafana** - Real-time metrics dashboard (JSON)
+- **QuickSight** - AWS-native analytics reference (JSON)
+- **Tableau** - Athena workbook template (.twb)
+- **Metabase** - Pre-built questions collection (JSON)
+
+Each includes pre-configured visualizations, queries, and import instructions. See [dashboards/README.md](dashboards/README.md) for details.
 
 ---
 
@@ -315,9 +386,13 @@ See [docs/schema-design.md](docs/schema-design.md) for details on consolidated v
 ```
 ├── config/
 │   └── schemas/            # Operator JSON schemas
-├── docs/                   # Documentation
-│   └── bi-integration.md   # BI tool setup guides
-├── infra/cdk/             # AWS CDK infrastructure
+├── dashboards/            # BI dashboard templates (Grafana, QuickSight, Tableau, etc.)
+├── docs/                  # Documentation
+│   ├── LAKEHOUSE-ARCHITECTURE.md  # Lakehouse design (Bronze/Silver/Gold)
+│   └── 06-bi-integration.md      # BI tool setup guides
+├── infra/
+│   ├── cdk/               # AWS CDK infrastructure (3 stacks)
+│   └── glue-jobs/         # Glue ETL scripts (Bronze→Silver→Gold)
 ├── packages/shared/       # Shared TypeScript types
 ├── scripts/               # Demo data scripts
 └── services/
@@ -338,6 +413,43 @@ See [docs/schema-design.md](docs/schema-design.md) for details on consolidated v
 | `TWILIO_ACCOUNT_SID` | Yes | Twilio Account SID |
 | `TWILIO_AUTH_TOKEN` | Yes | Twilio Auth Token |
 | `SKIP_SIGNATURE_VALIDATION` | No | Set to `true` for testing only |
+
+---
+
+## Architecture Decisions & Simplification
+
+### Simple Mode vs. Lakehouse Mode
+
+Both modes share the same ingestion pipeline (webhook → S3 + DynamoDB) and REST API.
+
+**Simple Mode** (default — `CIRL_ANALYTICS=simple`)
+- Deploys an Athena DynamoDB Connector (federated query via Lambda)
+- BI tools query live DynamoDB data through Athena SQL
+- No ETL jobs, no Parquet, no additional S3 buckets
+- Trade-off: higher per-query cost, queries affect DynamoDB capacity
+- Best for getting started, demos, and <100K conversations/month
+
+**Lakehouse Mode** (`CIRL_ANALYTICS=lakehouse`)
+- Deploys Glue ETL jobs that transform raw JSON into S3 Parquet (Bronze → Silver → Gold)
+- BI tools query optimized Parquet tables with clean, flat schemas
+- Analytical queries fully isolated from DynamoDB
+- Trade-off: data freshness depends on ETL schedule, more infrastructure to manage
+- Best for >100K conversations/month, heavy analytics, cost optimization
+
+**Switching from simple to lakehouse:**
+1. Set `CIRL_ANALYTICS=lakehouse` in `.env`
+2. Run `npm run deploy`
+3. Run Glue ETL jobs to backfill historical data
+4. Update BI tool connections (catalog/database/table names change)
+
+See [LAKEHOUSE-ARCHITECTURE.md](docs/LAKEHOUSE-ARCHITECTURE.md) for detailed cost comparisons and architecture details.
+
+### When to Remove DynamoDB
+
+If BI reporting is your only use case and you don't need the REST API:
+1. Remove the API stack
+2. Use lakehouse mode with Athena as the only query path
+3. Cost drops to ~$25/month for 10K conversations/month
 
 ---
 

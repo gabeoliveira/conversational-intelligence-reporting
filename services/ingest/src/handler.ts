@@ -2,7 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { writeToS3 } from './s3-writer';
 import { emitEvent } from './event-emitter';
 import { validateTwilioSignature } from './validate-signature';
-import { fetchOperatorResults, fetchTranscript } from './twilio-client';
+import { fetchOperatorResults, fetchTranscript, fetchSentences, computeTimingMetrics } from './twilio-client';
 import {
   TwilioCIWebhookPayload,
   CIWebhookPayload,
@@ -92,16 +92,22 @@ async function handleTwilioCIWebhook(
     }, requestId);
   }
 
-  // Fetch transcript details and operator results from Twilio
-  const [transcript, operatorResults] = await Promise.all([
+  // Fetch transcript details, operator results, and sentences from Twilio
+  const [transcript, operatorResults, sentences] = await Promise.all([
     fetchTranscript(transcript_sid),
     fetchOperatorResults(transcript_sid),
+    fetchSentences(transcript_sid),
   ]);
+
+  // Compute timing metrics from sentence-level timestamps
+  const timingMetrics = computeTimingMetrics(sentences);
 
   console.log('Fetched from Twilio', {
     transcriptSid: transcript.sid,
     operatorCount: operatorResults.length,
     operators: operatorResults.map((r) => r.name),
+    sentenceCount: sentences.length,
+    timingMetrics,
   });
 
   // Extract tenant ID from header or use default
@@ -134,6 +140,7 @@ async function handleTwilioCIWebhook(
         channel: transcript.channel,
         transcriptCreatedAt: transcript.dateCreated.toISOString(),
       },
+      timingMetrics: timingMetrics || undefined,
       _meta: {
         tenantId,
         receivedAt,
@@ -154,6 +161,7 @@ async function handleTwilioCIWebhook(
         customerKey: customer_key,
         serviceSid: service_sid,
         channel: transcript.channel,
+        ...(timingMetrics && { timingMetrics }),
       },
     };
 

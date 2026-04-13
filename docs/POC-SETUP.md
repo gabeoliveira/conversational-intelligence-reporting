@@ -1,0 +1,282 @@
+# POC Environment Setup & Testing Guide
+
+## Part 1: Environment Setup
+
+### Prerequisites
+
+- Node.js 20+
+- AWS CLI configured (`aws sts get-caller-identity` should work)
+- AWS CDK bootstrapped in target region (`npx cdk bootstrap` if not)
+- Customer's Twilio Account SID and Auth Token
+- Customer's Voice Intelligence Service SID
+
+### Step 1: Configure `.env.poc`
+
+The file already exists at the project root. Fill in the customer's Twilio credentials:
+
+```bash
+# .env.poc
+AWS_REGION=us-east-1
+CIRL_ENV=poc
+CIRL_ANALYTICS=simple
+CIRL_TENANT_ID=poc-customer
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your-auth-token
+SKIP_SIGNATURE_VALIDATION=true   # Keep true until webhook URL is stable
+```
+
+### Step 2: Deploy to AWS
+
+```bash
+npm run deploy:poc
+```
+
+This creates three CloudFormation stacks:
+- `CirlPocStorageStack` — DynamoDB table (`cirl-poc`), S3 bucket, EventBridge bus
+- `CirlPocApiStack` — 3 Lambdas (ingest, processor, dashboard), API Gateway
+- `CirlPocSimpleAnalyticsStack` — Athena DynamoDB Connector, workgroup
+
+**Save the outputs.** You need two URLs:
+
+```
+CirlPocApiStack.ApiUrl = https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1/
+CirlPocApiStack.WebhookUrl = https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1/webhook/ci
+```
+
+### Step 3: Configure Twilio Voice Intelligence Webhook
+
+1. Go to the **Twilio Console** (using the customer's account)
+2. Navigate to **Voice Intelligence** → **Services**
+3. Select the Voice Intelligence Service
+4. Under **Webhooks**, set:
+   - **Transcript Available URL**: paste the `WebhookUrl` from step 2
+   - **Method**: POST
+5. Save
+
+That's it for setup. When the service processes a call transcript, Twilio will POST to your webhook.
+
+### Step 4: Verify Deployment
+
+Quick smoke test — the API should return an empty result, not an error:
+
+```bash
+# Replace with your actual ApiUrl
+export API_URL="https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1"
+export TENANT="poc-customer"
+
+curl -s "$API_URL/tenants/$TENANT/conversations" | jq .
+# Expected: { "items": [], "nextToken": null }
+
+curl -s "$API_URL/tenants/$TENANT/metrics" | jq .
+# Expected: { "metrics": [], "period": { "from": "...", "to": "..." } }
+```
+
+If you get `{"message":"Internal server error"}`, check CloudWatch logs for `cirl-poc-dashboard`.
+
+---
+
+## Part 2: Testing Flow (End-to-End Verification)
+
+Test in the order data flows: **ingest → S3 → EventBridge → processor → DynamoDB → API**.
+
+### Test A: Trigger a Real Webhook
+
+Make a call through the customer's Twilio number that goes through Voice Intelligence. Wait for the transcript to complete (1-2 minutes after call ends).
+
+Alternatively, simulate the webhook manually:
+
+```bash
+# Simulates what Twilio sends when a transcript is ready
+curl -X POST "$API_URL/webhook/ci" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: poc-customer" \
+  -d '{
+    "account_sid": "AC417e8baece9b95537e84eb0fe8fb4e37",
+    "service_sid": "GAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "transcript_sid": "GTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "event_type": "voice_intelligence_transcript_available"
+  }'
+```
+
+**Expected**: `202 Accepted` with `operatorResults` array listing each operator.
+
+### Test B: Verify S3 (Raw Payloads)
+
+```bash
+aws s3 ls s3://cirl-raw-poc-$(aws sts get-caller-identity --query Account --output text)-us-east-1/poc-customer/ --recursive
+```
+
+You should see JSON files organized as `{tenant}/{operator}/{version}/{date}/{conversationId}-{timestamp}.json`.
+
+### Test C: Verify EventBridge (Events Emitted)
+
+Check the processor Lambda was triggered:
+
+```bash
+aws logs tail /aws/lambda/cirl-poc-processor --since 5m --format short
+```
+
+Look for `Processing: tenant=poc-customer, conversation=...` log lines.
+
+### Test D: Verify DynamoDB (Conversations + Metrics)
+
+```bash
+# Check conversation was written
+aws dynamodb query \
+  --table-name cirl-poc \
+  --key-condition-expression "PK = :pk" \
+  --expression-attribute-values '{":pk": {"S": "TENANT#poc-customer#CONV"}}' \
+  --max-items 5 \
+  --query "Items[].{PK: PK.S, SK: SK.S, entityType: entityType.S}" \
+  --output table
+
+# Check metrics were written
+aws dynamodb query \
+  --table-name cirl-poc \
+  --key-condition-expression "PK = :pk" \
+  --expression-attribute-values '{":pk": {"S": "TENANT#poc-customer#AGG#DAY"}}' \
+  --max-items 20 \
+  --query "Items[].{SK: SK.S, metricName: metricName.S}" \
+  --output table
+```
+
+### Test E: Verify API (End-to-End)
+
+```bash
+# List conversations
+curl -s "$API_URL/tenants/poc-customer/conversations" | jq .
+
+# Get metrics (including timing)
+curl -s "$API_URL/tenants/poc-customer/metrics" | jq '.metrics[] | select(.metricName | test("handling_time|response_time|conversation_count"))'
+
+# Get a specific conversation's operator results
+CONV_ID="<conversationId from above>"
+curl -s "$API_URL/tenants/poc-customer/conversations/$CONV_ID" | jq .
+```
+
+### Test F: Verify Timing Metrics Specifically
+
+After at least one real transcript processes:
+
+```bash
+curl -s "$API_URL/tenants/poc-customer/metrics" | jq '.metrics[] | select(.metricName | test("handling|response|wait|sentence"))'
+```
+
+Expected metrics:
+- `handling_time_sum`, `handling_time_count` → `avg_handling_time_sec`
+- `response_time_sum`, `response_time_count` → `avg_response_time_sec`
+- `customer_wait_time_sum`, `customer_wait_time_count` → `avg_customer_wait_time_sec`
+- `sentence_count_total`, `agent_sentence_count`, `customer_sentence_count`
+
+### Debugging: If Data Isn't Flowing
+
+| Symptom | Check |
+|---|---|
+| Webhook returns 401 | `SKIP_SIGNATURE_VALIDATION=true` in `.env.poc`? Redeploy if changed. |
+| Webhook returns 500 | CloudWatch: `/aws/lambda/cirl-poc-ingest` — likely Twilio creds issue |
+| S3 has files but DynamoDB is empty | CloudWatch: `/aws/lambda/cirl-poc-processor` — EventBridge rule or DynamoDB error |
+| DynamoDB has data but API returns empty | Check `CIRL_TENANT_ID` matches what you're querying. Check `X-Tenant-Id` header. |
+| Timing metrics are all zero | Sentence API returned empty — check transcript has completed processing in Twilio |
+| Operator results empty | Transcript has no operators assigned. Check Voice Intelligence service config. |
+
+---
+
+## Part 3: Unit Test Plan
+
+No tests exist yet. Jest is configured in all three services. Here's what to write:
+
+### Ingest Service (`services/ingest/src/__tests__/`)
+
+**`validate-signature.test.ts`** — Pure function, no mocks needed.
+- Valid signature with correct auth token → returns `true`
+- Wrong signature → returns `false`
+- Body hash mismatch → returns `false`
+- Missing bodySHA256 param → still validates signature only
+
+**`handler.test.ts`** — Mock AWS SDK and Twilio client.
+- Twilio CI webhook with valid transcript_sid → 202, calls fetchOperatorResults + fetchSentences + writeToS3 + emitEvent
+- Twilio CI webhook with missing Twilio creds → 500 with config error
+- Legacy webhook with valid payload → 202, writes to S3, emits event
+- Legacy webhook missing conversationId → 400
+- Missing body → 400
+- Invalid JSON body → 400
+- Signature validation enabled + invalid signature → 401
+
+**`twilio-client.test.ts`** — Mock the Twilio SDK.
+- `fetchOperatorResults` → returns normalized results for each operator type (json, text-generation, extract, classify)
+- `fetchTranscript` → returns expected shape (sid, channel, dateCreated)
+- `fetchSentences` → returns sorted sentences with correct field mapping (sentenceIndex → index, transcript → text, string startTime → number)
+- `computeTimingMetrics` — **Pure function, test thoroughly:**
+  - Empty sentences → returns null
+  - Single sentence → handlingTimeSec correct, response times = 0
+  - Two sentences (customer then agent) → correct response time
+  - Two sentences (agent then customer) → correct customer wait time
+  - Mixed conversation (customer, agent, customer, agent) → correct averages
+  - Overlapping sentences (negative gap) → gaps not counted
+  - All same mediaChannel (monologue) → response/wait times = 0
+
+### Processor Service (`services/processor/src/__tests__/`)
+
+**`handler.test.ts`** — Mock DynamoDB and S3.
+- Processes EventBridge event → calls writeConversation + writeOperatorResult + updateAggregates
+- Event with timingMetrics in metadata → calls updateTimingAggregates
+- Event without timingMetrics → does not call updateTimingAggregates
+- Schema validation failure → logs warning, continues processing
+- Enrichment failure → writes result with enrichmentError flag
+
+**`dynamo.test.ts`** — Mock DynamoDB DocumentClient.
+- `writeConversation` → creates/updates item with correct PK/SK, preserves existing payload
+- `writeConversation` with agentId/queueId/customerKey → sets GSI keys
+- `writeOperatorResult` → PutCommand with correct key pattern
+- `updateAggregates` with conversation-intelligence operator → increments all expected metrics
+- `updateAggregates` with sentiment operator → increments sentiment metrics
+- `updateAggregates` with unknown operator → only increments conversation_count and operator count
+- `updateTimingAggregates` → increments handling_time_sum/count, response_time_sum/count, sentence counts
+- `updateTimingAggregates` with zero/missing fields → skips those metrics
+- `incrementMetric` → read-then-write pattern, adds to existing value
+
+**`validate.test.ts`** — Mock DynamoDB for schema loading.
+- Valid payload against schema → `{ valid: true }`
+- Invalid payload → `{ valid: false, errors: [...] }`
+- Schema not found → `{ valid: true }` (pass-through)
+
+**`enrich.test.ts`** — No mocks needed (current implementation).
+- Default enrichment → returns rawPayload unchanged
+
+### API Service (`services/api/src/__tests__/`)
+
+**`handler.test.ts`** — Mock DynamoDB.
+- Routes GET /tenants/{id}/conversations → listConversations
+- Routes GET /tenants/{id}/conversations/{convId} → getConversation
+- Routes GET /tenants/{id}/metrics → getMetrics
+- Missing tenantId → 400
+- Unknown path → 404
+- OPTIONS → CORS preflight headers
+
+**`metrics.test.ts`** — Mock DynamoDB query results.
+- Returns raw metrics from DynamoDB
+- Computes sentiment_avg from sum/count
+- Computes avg_handling_time_sec from sum/count
+- Computes avg_response_time_sec from sum/count
+- Computes avg_customer_wait_time_sec from sum/count
+- Computes transfer_rate_percent from transfers/conversation_count
+- Filters by specific metric name
+- Default date range = last 30 days
+- Custom from/to date range
+
+**`conversations.test.ts`** — Mock DynamoDB query results.
+- Default query → uses main table PK
+- With agentId filter → uses GSI1
+- With queueId filter → uses GSI2
+- With customerKey filter → uses GSI3
+- Pagination → passes/returns nextToken
+- Limit capping → max 100
+
+### Priority Order for POC
+
+If you're short on time, write these first — they cover the new code and the most critical paths:
+
+1. **`computeTimingMetrics`** — pure function, most logic, highest risk of bugs
+2. **`updateTimingAggregates`** — verifies metrics flow to DynamoDB correctly
+3. **`metrics.test.ts` (derived metrics)** — verifies the API computes averages correctly
+4. **`handler.test.ts` (ingest)** — verifies the webhook → S3 → EventBridge flow

@@ -54,11 +54,16 @@ export async function getMetrics(
     })
   );
 
-  const metrics: MetricValue[] = (result.Items || []).map(item => ({
-    date: item.date,
-    metricName: item.metricName,
-    value: item.value,
-  }));
+  const metrics: MetricValue[] = (result.Items || []).map(item => {
+    // Parse payload to access entity-specific fields (spine + payload pattern)
+    const payload = item.payload ? JSON.parse(item.payload as string) : {};
+
+    return {
+      date: item.date as string,
+      metricName: item.metricName as string,
+      value: payload.value as number,
+    };
+  });
 
   // Compute derived metrics (e.g., sentiment average)
   const computedMetrics = computeDerivedMetrics(metrics);
@@ -214,6 +219,39 @@ function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {
         date,
         metricName: 'virtual_agent_maintained_consistency_percent',
         value: Math.round((vaMaintainedConsistency / convCount) * 100 * 100) / 100,
+      });
+    }
+
+    // Average handling time (seconds)
+    const handlingTimeSum = metrics.get('handling_time_sum');
+    const handlingTimeCount = metrics.get('handling_time_count');
+    if (handlingTimeSum !== undefined && handlingTimeCount !== undefined && handlingTimeCount > 0) {
+      derived.push({
+        date,
+        metricName: 'avg_handling_time_sec',
+        value: Math.round((handlingTimeSum / handlingTimeCount) * 100) / 100,
+      });
+    }
+
+    // Average agent response time (seconds)
+    const responseTimeSum = metrics.get('response_time_sum');
+    const responseTimeCount = metrics.get('response_time_count');
+    if (responseTimeSum !== undefined && responseTimeCount !== undefined && responseTimeCount > 0) {
+      derived.push({
+        date,
+        metricName: 'avg_response_time_sec',
+        value: Math.round((responseTimeSum / responseTimeCount) * 100) / 100,
+      });
+    }
+
+    // Average customer wait time (seconds)
+    const customerWaitSum = metrics.get('customer_wait_time_sum');
+    const customerWaitCount = metrics.get('customer_wait_time_count');
+    if (customerWaitSum !== undefined && customerWaitCount !== undefined && customerWaitCount > 0) {
+      derived.push({
+        date,
+        metricName: 'avg_customer_wait_time_sec',
+        value: Math.round((customerWaitSum / customerWaitCount) * 100) / 100,
       });
     }
 

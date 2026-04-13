@@ -1,6 +1,6 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { getPayloadFromS3 } from './storage/s3';
-import { writeConversation, writeOperatorResult, updateAggregates } from './storage/dynamo';
+import { writeConversation, writeOperatorResult, updateAggregates, updateTimingAggregates } from './storage/dynamo';
 import { enrich } from './enrich/enrich';
 import { validatePayload } from './schema/validate';
 import type { PayloadReceivedEvent, CIWebhookPayload } from './types';
@@ -84,13 +84,24 @@ export async function handler(
       receivedAt,
     });
 
-    // 8. Update aggregates
+    // 8. Update aggregates (operator metrics + timing metrics if available)
     await updateAggregates({
       tenantId,
       operatorName,
       payload: enrichedPayload,
       receivedAt,
     });
+
+    // 9. Update timing metrics (from transcript sentences, if present)
+    const timingMetrics = (metadata as Record<string, unknown>)?.timingMetrics as
+      Record<string, number> | undefined;
+    if (timingMetrics) {
+      await updateTimingAggregates({
+        tenantId,
+        timingMetrics,
+        receivedAt,
+      });
+    }
 
     console.log(`Successfully processed: ${conversationId}/${operatorName}`);
 

@@ -105,21 +105,24 @@ export async function listConversations(
 
   const result = await docClient.send(new QueryCommand(queryParams));
 
-  const items = (result.Items || []).map(item => ({
-    conversationId: item.conversationId,
-    tenantId: item.tenantId,
-    customerKey: item.customerKey,
-    channel: item.channel,
-    agentId: item.agentId,
-    teamId: item.teamId,
-    queueId: item.queueId,
-    startedAt: item.startedAt,
-    endedAt: item.endedAt,
-    summary: item.summary,
-    operatorCount: item.operatorCount,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-  }));
+  const items = (result.Items || []).map(item => {
+    // Parse payload to access entity-specific fields (spine + payload pattern)
+    const payload = item.payload ? JSON.parse(item.payload as string) : {};
+
+    return {
+      conversationId: item.conversationId,
+      tenantId: item.tenantId,
+      customerKey: payload.customerKey,
+      channel: payload.channel,
+      agentId: payload.agentId,
+      teamId: payload.teamId,
+      queueId: payload.queueId,
+      startedAt: item.startedAt,
+      operatorCount: payload.operatorCount,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    };
+  });
 
   const response: { items: unknown[]; nextToken?: string } = { items };
 
@@ -166,30 +169,38 @@ export async function getConversation(
     })
   );
 
-  const operators = (operatorResult.Items || []).map(item => ({
-    operatorName: item.operatorName,
-    schemaVersion: item.schemaVersion,
-    displayFields: item.displayFields,
-    enrichedPayload: item.enrichedPayload,
-    enrichedAt: item.enrichedAt,
-    enrichmentError: item.enrichmentError,
-    receivedAt: item.receivedAt,
-    s3Uri: item.s3Uri,
-  }));
+  const operators = (operatorResult.Items || []).map(item => {
+    // Parse payload to access entity-specific fields (spine + payload pattern)
+    const payload = item.payload ? JSON.parse(item.payload as string) : {};
+
+    return {
+      operatorName: item.operatorName,
+      schemaVersion: item.schemaVersion,
+      displayFields: payload.displayFields,
+      enrichedPayload: payload.enrichedPayload,
+      enrichedAt: payload.enrichedAt,
+      enrichmentError: payload.enrichmentError,
+      receivedAt: item.receivedAt,
+      s3Uri: payload.s3Uri,
+    };
+  });
+
+  // Parse conversation payload
+  const conversationPayload = conversation.payload ? JSON.parse(conversation.payload as string) : {};
 
   return {
     conversation: {
       conversationId: conversation.conversationId,
       tenantId: conversation.tenantId,
-      customerKey: conversation.customerKey,
-      channel: conversation.channel,
-      agentId: conversation.agentId,
-      teamId: conversation.teamId,
-      queueId: conversation.queueId,
+      customerKey: conversationPayload.customerKey,
+      channel: conversationPayload.channel,
+      agentId: conversationPayload.agentId,
+      teamId: conversationPayload.teamId,
+      queueId: conversationPayload.queueId,
       startedAt: conversation.startedAt,
-      endedAt: conversation.endedAt,
-      summary: conversation.summary,
-      operatorCount: conversation.operatorCount,
+      operatorCount: conversationPayload.operatorCount,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
     },
     operators,
   };

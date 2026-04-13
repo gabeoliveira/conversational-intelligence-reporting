@@ -1,0 +1,600 @@
+{
+  "name": "CIRL Conversational Intelligence Dashboard",
+  "description": "Sample QuickSight dashboard template for CIRL analytics using Athena Federated Query",
+  "version": "2.0",
+  "instructions": "This is a reference template. QuickSight doesn't support direct JSON import for dashboards. Use this as a guide to manually create visuals in QuickSight with custom SQL queries using federated query syntax.",
+  "dataSource": {
+    "type": "Athena",
+    "catalog": "cirl_dynamo_{env}",
+    "database": "default",
+    "workgroup": "cirl-{env}",
+    "table": "{dynamodb_table_name}",
+    "note": "Use custom SQL with federated query syntax - see datasets below for examples"
+  },
+  "datasets": [
+    {
+      "name": "CIRL Metrics",
+      "description": "Pre-aggregated metrics by tenant and date using federated query",
+      "source": "Custom SQL",
+      "sql": "SELECT regexp_extract(PK, 'TENANT#([^#]+)', 1) as tenant_id, regexp_extract(SK, 'DAY#(\\\\d{8})', 1) as date_yyyymmdd, regexp_extract(SK, 'METRIC#(.+)', 1) as metric_name, value as metric_value FROM \"cirl_dynamo_{env}\".default.\"{table_name}\" WHERE PK LIKE 'TENANT#{tenant_id}#AGG#DAY' AND regexp_extract(SK, 'DAY#(\\\\d{8})', 1) >= format_datetime(current_date - interval '30' day, 'yyyyMMdd')",
+      "note": "Replace {env}, {table_name}, and {tenant_id} with your actual values",
+      "fields": [
+        {
+          "name": "tenant_id",
+          "type": "string",
+          "description": "Extracted from PK using regexp_extract"
+        },
+        {
+          "name": "date_yyyymmdd",
+          "type": "string",
+          "description": "Extracted from SK (format: YYYYMMDD)"
+        },
+        {
+          "name": "metric_name",
+          "type": "string",
+          "description": "Extracted from SK"
+        },
+        {
+          "name": "metric_value",
+          "type": "decimal",
+          "description": "The metric value"
+        }
+      ]
+    },
+    {
+      "name": "CIRL Conversations",
+      "description": "Individual conversation records using federated query",
+      "source": "Custom SQL",
+      "sql": "SELECT regexp_extract(PK, 'TENANT#([^#]+)', 1) as tenant_id, conversationId as conversation_id, customerKey as customer_key, agentId as agent_id, startedAt as started_at, channelType as channel_type, operatorCount as operator_count FROM \"cirl_dynamo_{env}\".default.\"{table_name}\" WHERE PK LIKE 'TENANT#{tenant_id}#CONV' AND startedAt >= format_datetime(current_date - interval '7' day, 'yyyy-MM-dd HH:mm:ss')",
+      "note": "Replace {env}, {table_name}, and {tenant_id} with your actual values",
+      "fields": [
+        {
+          "name": "conversation_id",
+          "type": "string"
+        },
+        {
+          "name": "tenant_id",
+          "type": "string",
+          "description": "Extracted from PK using regexp_extract"
+        },
+        {
+          "name": "customer_key",
+          "type": "string"
+        },
+        {
+          "name": "agent_id",
+          "type": "string"
+        },
+        {
+          "name": "started_at",
+          "type": "datetime"
+        },
+        {
+          "name": "channel_type",
+          "type": "string"
+        },
+        {
+          "name": "operator_count",
+          "type": "integer"
+        }
+      ]
+    }
+  ],
+  "visuals": [
+    {
+      "id": "kpi-1",
+      "name": "Total Conversations",
+      "type": "KPI",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "value": {
+          "field": "metric_value",
+          "aggregation": "SUM"
+        },
+        "filter": {
+          "metric_name": {
+            "equals": "conversation_count"
+          }
+        },
+        "comparison": {
+          "comparisonMethod": "PERCENT_DIFFERENCE",
+          "comparisonType": "PREVIOUS_PERIOD"
+        },
+        "primaryValueDisplayFormat": {
+          "decimalPlaces": 0,
+          "prefix": "",
+          "suffix": " convos"
+        }
+      }
+    },
+    {
+      "id": "kpi-2",
+      "name": "Average Sentiment",
+      "type": "KPI",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "value": {
+          "field": "metric_value",
+          "aggregation": "AVERAGE"
+        },
+        "filter": {
+          "metric_name": {
+            "equals": "sentiment_avg"
+          }
+        },
+        "comparison": {
+          "comparisonMethod": "PERCENT_DIFFERENCE",
+          "comparisonType": "PREVIOUS_PERIOD"
+        },
+        "primaryValueDisplayFormat": {
+          "decimalPlaces": 1,
+          "prefix": "",
+          "suffix": "/100"
+        },
+        "conditionalFormatting": {
+          "thresholds": [
+            {
+              "value": 70,
+              "color": "green",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 50,
+              "color": "yellow",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 0,
+              "color": "red",
+              "comparison": "GREATER_THAN_OR_EQUAL"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "kpi-3",
+      "name": "Transfer Rate",
+      "type": "KPI",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "value": {
+          "field": "metric_value",
+          "aggregation": "AVERAGE"
+        },
+        "filter": {
+          "metric_name": {
+            "equals": "transfer_rate_percent"
+          }
+        },
+        "comparison": {
+          "comparisonMethod": "PERCENT_DIFFERENCE",
+          "comparisonType": "PREVIOUS_PERIOD"
+        },
+        "primaryValueDisplayFormat": {
+          "decimalPlaces": 1,
+          "prefix": "",
+          "suffix": "%"
+        },
+        "conditionalFormatting": {
+          "thresholds": [
+            {
+              "value": 40,
+              "color": "red",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 20,
+              "color": "yellow",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 0,
+              "color": "green",
+              "comparison": "GREATER_THAN_OR_EQUAL"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "kpi-4",
+      "name": "Virtual Agent Quality",
+      "type": "KPI",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "value": {
+          "field": "metric_value",
+          "aggregation": "AVERAGE"
+        },
+        "filter": {
+          "metric_name": {
+            "equals": "virtual_agent_quality_avg"
+          }
+        },
+        "comparison": {
+          "comparisonMethod": "PERCENT_DIFFERENCE",
+          "comparisonType": "PREVIOUS_PERIOD"
+        },
+        "primaryValueDisplayFormat": {
+          "decimalPlaces": 1,
+          "prefix": "",
+          "suffix": "/10"
+        },
+        "conditionalFormatting": {
+          "thresholds": [
+            {
+              "value": 7,
+              "color": "green",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 5,
+              "color": "yellow",
+              "comparison": "GREATER_THAN"
+            },
+            {
+              "value": 0,
+              "color": "red",
+              "comparison": "GREATER_THAN_OR_EQUAL"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "line-1",
+      "name": "Sentiment Trend",
+      "type": "Line chart",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "xAxis": {
+          "field": "date",
+          "label": "Date"
+        },
+        "yAxis": {
+          "field": "metric_value",
+          "aggregation": "AVERAGE",
+          "label": "Sentiment Score"
+        },
+        "color": {
+          "field": "metric_name"
+        },
+        "filter": {
+          "metric_name": {
+            "in": ["sentiment_avg"]
+          }
+        },
+        "sort": {
+          "field": "date",
+          "direction": "ASC"
+        }
+      }
+    },
+    {
+      "id": "line-2",
+      "name": "Daily Conversation Volume",
+      "type": "Line chart",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "xAxis": {
+          "field": "date",
+          "label": "Date"
+        },
+        "yAxis": {
+          "field": "metric_value",
+          "aggregation": "SUM",
+          "label": "Conversations"
+        },
+        "filter": {
+          "metric_name": {
+            "equals": "conversation_count"
+          }
+        },
+        "sort": {
+          "field": "date",
+          "direction": "ASC"
+        }
+      }
+    },
+    {
+      "id": "bar-1",
+      "name": "Operator Usage",
+      "type": "Horizontal bar chart",
+      "dataset": "CIRL Metrics",
+      "configuration": {
+        "xAxis": {
+          "field": "metric_value",
+          "aggregation": "SUM",
+          "label": "Execution Count"
+        },
+        "yAxis": {
+          "field": "metric_name",
+          "label": "Operator"
+        },
+        "filter": {
+          "metric_name": {
+            "contains": "operator_"
+          }
+        },
+        "sort": {
+          "field": "metric_value",
+          "aggregation": "SUM",
+          "direction": "DESC"
+        },
+        "limit": 10
+      }
+    },
+    {
+      "id": "table-1",
+      "name": "Top Customers by Conversation Volume",
+      "type": "Table",
+      "dataset": "CIRL Conversations",
+      "configuration": {
+        "groupBy": [
+          {
+            "field": "customer_key",
+            "label": "Customer"
+          }
+        ],
+        "values": [
+          {
+            "field": "conversation_id",
+            "aggregation": "COUNT",
+            "label": "Conversations"
+          },
+          {
+            "field": "started_at",
+            "aggregation": "MAX",
+            "label": "Last Contact"
+          }
+        ],
+        "sort": {
+          "field": "conversation_id",
+          "aggregation": "COUNT",
+          "direction": "DESC"
+        },
+        "limit": 20
+      }
+    },
+    {
+      "id": "table-2",
+      "name": "Recent Conversations",
+      "type": "Table",
+      "dataset": "CIRL Conversations",
+      "configuration": {
+        "fields": [
+          {
+            "field": "conversation_id",
+            "label": "Conversation ID"
+          },
+          {
+            "field": "started_at",
+            "label": "Started"
+          },
+          {
+            "field": "customer_key",
+            "label": "Customer"
+          },
+          {
+            "field": "agent_id",
+            "label": "Agent"
+          },
+          {
+            "field": "channel_type",
+            "label": "Channel"
+          },
+          {
+            "field": "operator_count",
+            "label": "Operators"
+          }
+        ],
+        "sort": {
+          "field": "started_at",
+          "direction": "DESC"
+        },
+        "limit": 50
+      }
+    },
+    {
+      "id": "heatmap-1",
+      "name": "Conversation Volume by Hour and Day",
+      "type": "Heat map",
+      "dataset": "CIRL Conversations",
+      "configuration": {
+        "rows": {
+          "field": "started_at",
+          "function": "truncDate",
+          "period": "WK",
+          "label": "Week"
+        },
+        "columns": {
+          "field": "started_at",
+          "function": "extractDate",
+          "period": "HH",
+          "label": "Hour"
+        },
+        "values": {
+          "field": "conversation_id",
+          "aggregation": "COUNT",
+          "label": "Conversations"
+        },
+        "colorScale": {
+          "colors": ["#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"],
+          "type": "gradient"
+        }
+      }
+    },
+    {
+      "id": "pie-1",
+      "name": "Channel Distribution",
+      "type": "Pie chart",
+      "dataset": "CIRL Conversations",
+      "configuration": {
+        "groupBy": {
+          "field": "channel_type",
+          "label": "Channel"
+        },
+        "values": {
+          "field": "conversation_id",
+          "aggregation": "COUNT",
+          "label": "Conversations"
+        },
+        "sort": {
+          "field": "conversation_id",
+          "aggregation": "COUNT",
+          "direction": "DESC"
+        }
+      }
+    }
+  ],
+  "layout": {
+    "sheets": [
+      {
+        "name": "Overview",
+        "visuals": [
+          {
+            "id": "kpi-1",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": "kpi-2",
+            "position": {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": "kpi-3",
+            "position": {
+              "x": 12,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": "kpi-4",
+            "position": {
+              "x": 18,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": "line-1",
+            "position": {
+              "x": 0,
+              "y": 4,
+              "width": 12,
+              "height": 8
+            }
+          },
+          {
+            "id": "line-2",
+            "position": {
+              "x": 12,
+              "y": 4,
+              "width": 12,
+              "height": 8
+            }
+          },
+          {
+            "id": "bar-1",
+            "position": {
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 8
+            }
+          },
+          {
+            "id": "pie-1",
+            "position": {
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 8
+            }
+          }
+        ]
+      },
+      {
+        "name": "Customer Insights",
+        "visuals": [
+          {
+            "id": "table-1",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 12
+            }
+          },
+          {
+            "id": "table-2",
+            "position": {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 12
+            }
+          },
+          {
+            "id": "heatmap-1",
+            "position": {
+              "x": 0,
+              "y": 12,
+              "width": 24,
+              "height": 8
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "filters": [
+    {
+      "name": "Date Range",
+      "field": "date",
+      "type": "time-range",
+      "defaultValue": {
+        "start": "now-30d",
+        "end": "now"
+      },
+      "appliesTo": "ALL_SHEETS"
+    },
+    {
+      "name": "Tenant",
+      "field": "tenant_id",
+      "type": "list",
+      "defaultValue": "{your-tenant-id}",
+      "appliesTo": "ALL_SHEETS"
+    }
+  ],
+  "notes": [
+    "This is a template for reference only. QuickSight does not support direct JSON dashboard imports.",
+    "To create this dashboard in QuickSight:",
+    "1. Create the datasets using the SQL queries provided above",
+    "2. Create a new Analysis",
+    "3. Add visuals using the specifications in the 'visuals' array",
+    "4. Apply filters as specified in the 'filters' array",
+    "5. Organize visuals into sheets as shown in 'layout'",
+    "",
+    "For automated dashboard creation, consider using:",
+    "- AWS CloudFormation with QuickSight resources",
+    "- AWS CLI with QuickSight APIs (create-dashboard, create-template)",
+    "- Terraform with QuickSight provider",
+    "",
+    "See QuickSight documentation for details:",
+    "https://docs.aws.amazon.com/quicksight/latest/developerguide/working-with-dashboards.html"
+  ]
+}

@@ -124,7 +124,7 @@ export class StorageStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'TableName', {
       value: this.table.tableName,
-      description: 'DynamoDB table name',
+      description: 'DynamoDB table name (spine + payload pattern)',
     });
 
     new cdk.CfnOutput(this, 'EventBusName', {

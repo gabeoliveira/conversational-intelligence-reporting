@@ -1,0 +1,604 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=conversation_count",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics"
+        }
+      ],
+      "title": "Total Conversations",
+      "type": "stat"
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=sentiment_avg",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics"
+        }
+      ],
+      "title": "Average Sentiment",
+      "type": "stat"
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 40
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=transfer_rate_percent",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics"
+        }
+      ],
+      "title": "Transfer Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "green",
+                "value": 7
+              }
+            ]
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 10
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=virtual_agent_quality_avg",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics"
+        }
+      ],
+      "title": "Virtual Agent Quality",
+      "type": "stat"
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "Time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "metricName",
+              "text": "Metric",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Value",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "title": "Metrics Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "metrics",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "Date",
+              "type": "string"
+            },
+            {
+              "selector": "metricName",
+              "text": "Metric",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Count",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "title": "Daily Conversation Volume",
+      "type": "timeseries",
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": "conversation_count"
+                  }
+                },
+                "fieldName": "Metric"
+              }
+            ],
+            "match": "all",
+            "type": "include"
+          }
+        }
+      ]
+    },
+    {
+      "datasource": "Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "type": "json",
+          "url": "${API_URL}/tenants/${TENANT_ID}/conversations?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&limit=100",
+          "method": "GET",
+          "parser": "backend",
+          "source": "url",
+          "root_selector": "items",
+          "columns": [
+            {
+              "selector": "conversationId",
+              "text": "Conversation ID",
+              "type": "string"
+            },
+            {
+              "selector": "startedAt",
+              "text": "Started At",
+              "type": "timestamp"
+            },
+            {
+              "selector": "channel.type",
+              "text": "Channel",
+              "type": "string"
+            },
+            {
+              "selector": "agentId",
+              "text": "Agent",
+              "type": "string"
+            },
+            {
+              "selector": "customerKey",
+              "text": "Customer",
+              "type": "string"
+            },
+            {
+              "selector": "operatorCount",
+              "text": "Operators",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "title": "Recent Conversations",
+      "type": "table"
+    }
+  ],
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["cirl", "conversational-intelligence", "twilio"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/v1",
+          "value": "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/v1"
+        },
+        "description": "CIRL API Gateway URL",
+        "error": null,
+        "hide": 0,
+        "label": "API URL",
+        "name": "API_URL",
+        "options": [],
+        "query": "https://your-api-gateway.execute-api.us-east-1.amazonaws.com/v1",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "your-tenant-id",
+          "value": "your-tenant-id"
+        },
+        "description": "Tenant ID to filter data",
+        "error": null,
+        "hide": 0,
+        "label": "Tenant ID",
+        "name": "TENANT_ID",
+        "options": [],
+        "query": "your-tenant-id",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CIRL - Conversational Intelligence Dashboard",
+  "uid": "cirl-dashboard",
+  "version": 1
+}

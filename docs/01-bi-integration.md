@@ -1,6 +1,8 @@
-# BI Tool Integration Guide
+# BI Tool Integration Guide (REST API)
 
-This guide explains how to connect your CIRL API to popular BI tools for building custom dashboards and analytics.
+> **Note:** This guide covers the **REST API** integration path only. For the recommended **Athena + Glue lakehouse** approach (SQL-based BI tools like QuickSight, Tableau, PowerBI), see [06-bi-integration.md](./06-bi-integration.md) and [LAKEHOUSE-ARCHITECTURE.md](./LAKEHOUSE-ARCHITECTURE.md).
+
+This guide explains how to connect your CIRL REST API to BI tools for building custom dashboards and analytics.
 
 ## Table of Contents
 
@@ -49,23 +51,13 @@ AWS QuickSight has the best integration with CIRL since both run on AWS.
    - Drag `value` to Y-axis
    - Filter by `metricName`
 
-### Option 2: S3 Export (For Large Datasets)
+### Option 2: Athena Lakehouse (Recommended for Large Datasets)
 
-If you need better performance or historical data:
+For better performance, historical data, and standard SQL access, use the lakehouse approach:
 
-1. Export DynamoDB to S3 (add to your CDK stack)
-2. Use QuickSight's S3 connector
-3. Query with Athena for SQL-like interface
-
-**Sample CDK Addition:**
-```typescript
-// Export DynamoDB table to S3 daily
-const exportRule = new events.Rule(this, 'DailyExport', {
-  schedule: events.Schedule.cron({ hour: '2', minute: '0' }),
-});
-
-exportRule.addTarget(new targets.LambdaFunction(exportLambda));
-```
+1. CIRL's AnalyticsStack deploys Glue ETL jobs that transform raw data into S3 Parquet
+2. Connect QuickSight to Athena using database `cirl_{env}` and `lakehouse_*` tables
+3. See [06-bi-integration.md](./06-bi-integration.md) for complete setup instructions
 
 ---
 
@@ -209,9 +201,9 @@ view: metrics {
 
 Add a Lambda that converts your REST API to Looker's expected format, or use Looker's native API connection if available.
 
-### Option 2: Athena/Redshift Export
+### Option 2: Athena Lakehouse (Recommended)
 
-Export DynamoDB data to S3, then use Looker's Athena or Redshift connector.
+Use Looker's native Athena connector with the lakehouse tables. See [06-bi-integration.md](./06-bi-integration.md) for setup.
 
 ---
 

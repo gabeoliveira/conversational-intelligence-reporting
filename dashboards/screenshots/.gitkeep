@@ -1,0 +1,10 @@
+# Dashboard Screenshots
+
+Add screenshots of your dashboards here for documentation:
+
+- `quicksight-overview.png` - QuickSight dashboard overview
+- `grafana-realtime.png` - Grafana real-time dashboard
+- `tableau-analysis.png` - Tableau analysis workbook
+- `metabase-questions.png` - Metabase questions collection
+
+Screenshots help users understand what the dashboards look like before importing them.
