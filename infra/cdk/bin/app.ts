@@ -9,39 +9,28 @@ import { AnalyticsStack } from '../lib/analytics-stack';
 import { SimpleAnalyticsStack } from '../lib/simple-analytics-stack';
 
 // Load environment variables from project root
-// Supports env-specific files: .env.poc, .env.dev, etc.
-// Priority: .env.{CIRL_ENV || context.env} > .env (fallback)
+// The DOTENV_CONFIG_PATH env var (set by deploy scripts) controls which file to load.
+// Falls back to .env if not set.
 const projectRoot = path.join(__dirname, '..', '..', '..');
-
-// Peek at CDK context to determine which env file to load
-const tempApp = new cdk.App();
-const contextEnv = tempApp.node.tryGetContext('env');
-
-const envName = contextEnv || process.env.CIRL_ENV;
-if (envName) {
-  const envSpecificPath = path.join(projectRoot, `.env.${envName}`);
-  const result = dotenv.config({ path: envSpecificPath });
-  if (result.error) {
-    // Fall back to default .env
-    dotenv.config({ path: path.join(projectRoot, '.env') });
-  }
-} else {
-  dotenv.config({ path: path.join(projectRoot, '.env') });
-}
+const envFilePath = process.env.DOTENV_CONFIG_PATH || path.join(projectRoot, '.env');
+dotenv.config({ path: envFilePath });
 
 const app = new cdk.App();
 
 const env = app.node.tryGetContext('env') || process.env.CIRL_ENV || 'dev';
 const stackPrefix = `Cirl${env.charAt(0).toUpperCase() + env.slice(1)}`;
 
-// Analytics mode: "simple" (DynamoDB federated query) or "lakehouse" (Glue ETL + S3 Parquet)
-// Default: simple — fewer moving parts, zero operational overhead
+// Analytics mode:
+//   "none"      — No Athena/analytics stack. REST API only (Grafana, Metabase, custom).
+//   "simple"    — Athena DynamoDB Connector. SQL-based BI tools query DynamoDB directly.
+//   "lakehouse" — Glue ETL + S3 Parquet. Best for heavy analytics.
+// Default: none — just the API, no extra infrastructure.
 const analyticsMode =
-  app.node.tryGetContext('analytics') || process.env.CIRL_ANALYTICS || 'simple';
+  app.node.tryGetContext('analytics') || process.env.CIRL_ANALYTICS || 'none';
 
-if (analyticsMode !== 'simple' && analyticsMode !== 'lakehouse') {
+if (!['none', 'simple', 'lakehouse'].includes(analyticsMode)) {
   throw new Error(
-    `Invalid CIRL_ANALYTICS value: "${analyticsMode}". Must be "simple" or "lakehouse".`
+    `Invalid CIRL_ANALYTICS value: "${analyticsMode}". Must be "none", "simple", or "lakehouse".`
   );
 }
 
@@ -75,7 +64,7 @@ if (analyticsMode === 'lakehouse') {
     table: storageStack.table,
     encryptionKey: storageStack.encryptionKey,
   });
-} else {
+} else if (analyticsMode === 'simple') {
   new SimpleAnalyticsStack(app, `${stackPrefix}SimpleAnalyticsStack`, {
     env: {
       account: process.env.CDK_DEFAULT_ACCOUNT,
@@ -86,5 +75,6 @@ if (analyticsMode === 'lakehouse') {
     encryptionKey: storageStack.encryptionKey,
   });
 }
+// analyticsMode === 'none': no analytics stack — REST API only
 
 app.synth();

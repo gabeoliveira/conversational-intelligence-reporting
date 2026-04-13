@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poc-analytics-v1",
+  "title": "POC Analytics Operator",
+  "description": "Custom operator for POC customer. Analyzes AI virtual agent performance, conversation topics, and inferred satisfaction. Note: Twilio automatically sets all fields as required and additionalProperties to false. Numeric ranges and formats are documented in descriptions since Twilio does not support minimum/maximum/format constraints.",
+  "type": "object",
+  "properties": {
+    "ai_retained": {
+      "type": "boolean",
+      "description": "Whether the AI virtual agent was able to solve the customer's issue or question without having to transfer to a human agent. true = AI resolved it, false = transferred or failed to resolve."
+    },
+    "topic": {
+      "type": "string",
+      "description": "The main conversation topic in a single word, in Portuguese (e.g., 'fatura', 'cancelamento', 'suporte', 'agendamento', 'reclamacao', 'informacao', 'pagamento', 'outros'). Use lowercase, no accents."
+    },
+    "back_to_ivr": {
+      "type": "boolean",
+      "description": "Whether the customer asked to return to an IVR flow or pressed 0 (or equivalent) to go back to the automated menu. true = customer went back to IVR."
+    },
+    "asked_for_human": {
+      "type": "boolean",
+      "description": "Whether the customer explicitly asked to talk to a human agent at any point during the conversation. true = customer requested a human."
+    },
+    "inferred_csat": {
+      "type": "integer",
+      "description": "Customer satisfaction score inferred from the conversation tone, resolution, and overall experience. MUST be an integer from 1 to 5, where: 1 = very dissatisfied, 2 = dissatisfied, 3 = neutral, 4 = satisfied, 5 = very satisfied."
+    },
+    "errors": {
+      "type": "boolean",
+      "description": "Whether the AI made any mistakes during the call, including hallucinations (fabricated information), misconceptions (wrong assumptions about the customer's intent), or misunderstandings (failing to comprehend what the customer said). true = errors occurred."
+    }
+  }
+}

@@ -190,18 +190,42 @@ export async function writeOperatorResult(params: WriteOperatorResultParams): Pr
 
 interface UpdateAggregatesParams {
   tenantId: string;
+  conversationId: string;
   operatorName: string;
   payload: Record<string, unknown>;
   receivedAt: string;
 }
 
 export async function updateAggregates(params: UpdateAggregatesParams): Promise<void> {
-  const { tenantId, operatorName, payload, receivedAt } = params;
+  const { tenantId, conversationId, operatorName, payload, receivedAt } = params;
   const date = formatDate(new Date(receivedAt));
 
-  // Always increment conversation count and operator-specific count
-  await incrementMetric(tenantId, date, 'conversation_count', 1);
+  // Always increment operator-specific count
   await incrementMetric(tenantId, date, `operator_${operatorName}_count`, 1);
+
+  // Increment conversation_count only once per conversation per day.
+  // Use a conditional put — if the marker already exists, skip the increment.
+  const markerKey = {
+    PK: `TENANT#${tenantId}#CONV_SEEN#${date}`,
+    SK: `CONV#${conversationId}`,
+  };
+  try {
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: { ...markerKey, ttl: Math.floor(Date.now() / 1000) + 86400 * 7 },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+    // Marker didn't exist → first operator for this conversation today
+    await incrementMetric(tenantId, date, 'conversation_count', 1);
+  } catch (error: any) {
+    if (error.name === 'ConditionalCheckFailedException') {
+      // Marker already exists → conversation already counted today, skip
+    } else {
+      throw error;
+    }
+  }
 
   // Operator-specific aggregates
   if (operatorName === 'sentiment' || payload.overall_sentiment || payload.sentiment_score) {
@@ -360,6 +384,50 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
           }
         }
       }
+    }
+  }
+
+  // POC Analytics operator (FriendlyName: "Analytics" in Twilio)
+  if (operatorName === 'Analytics') {
+    // AI retention: whether AI solved without human transfer
+    const aiRetained = payload.ai_retained;
+    if (typeof aiRetained === 'boolean') {
+      await incrementMetric(tenantId, date, 'poc_ai_retained_count', aiRetained ? 1 : 0);
+      await incrementMetric(tenantId, date, 'poc_ai_not_retained_count', aiRetained ? 0 : 1);
+      await incrementMetric(tenantId, date, 'poc_ai_retained_total', 1);
+    }
+
+    // Topic tracking
+    const topic = payload.topic as string;
+    if (topic && typeof topic === 'string') {
+      await incrementMetric(tenantId, date, `poc_topic_${topic.toLowerCase()}`, 1);
+    }
+
+    // Back to IVR
+    const backToIvr = payload.back_to_ivr;
+    if (typeof backToIvr === 'boolean' && backToIvr) {
+      await incrementMetric(tenantId, date, 'poc_back_to_ivr_count', 1);
+    }
+
+    // Asked for human
+    const askedForHuman = payload.asked_for_human;
+    if (typeof askedForHuman === 'boolean' && askedForHuman) {
+      await incrementMetric(tenantId, date, 'poc_asked_for_human_count', 1);
+    }
+
+    // Inferred CSAT (1-5 scale)
+    const inferredCsat = payload.inferred_csat as number;
+    if (typeof inferredCsat === 'number' && inferredCsat >= 1 && inferredCsat <= 5) {
+      await incrementMetric(tenantId, date, 'poc_csat_sum', inferredCsat);
+      await incrementMetric(tenantId, date, 'poc_csat_count', 1);
+      // Track distribution
+      await incrementMetric(tenantId, date, `poc_csat_${inferredCsat}`, 1);
+    }
+
+    // AI errors (hallucinations, misconceptions, misunderstandings)
+    const errors = payload.errors;
+    if (typeof errors === 'boolean' && errors) {
+      await incrementMetric(tenantId, date, 'poc_errors_count', 1);
     }
   }
 }

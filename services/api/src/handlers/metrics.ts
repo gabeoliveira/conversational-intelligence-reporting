@@ -255,6 +255,58 @@ function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {
       });
     }
 
+    // POC Analytics derived metrics
+    const pocCsatSum = metrics.get('poc_csat_sum');
+    const pocCsatCount = metrics.get('poc_csat_count');
+    if (pocCsatSum !== undefined && pocCsatCount !== undefined && pocCsatCount > 0) {
+      derived.push({
+        date,
+        metricName: 'poc_csat_avg',
+        value: Math.round((pocCsatSum / pocCsatCount) * 100) / 100,
+      });
+    }
+
+    // AI retention rate (percentage of conversations where AI resolved without human)
+    const pocAiRetained = metrics.get('poc_ai_retained_count');
+    const pocAiTotal = metrics.get('poc_ai_retained_total');
+    if (pocAiRetained !== undefined && pocAiTotal !== undefined && pocAiTotal > 0) {
+      derived.push({
+        date,
+        metricName: 'poc_ai_retention_rate_percent',
+        value: Math.round((pocAiRetained / pocAiTotal) * 100 * 100) / 100,
+      });
+    }
+
+    // Error rate (percentage of conversations with AI errors)
+    const pocErrors = metrics.get('poc_errors_count');
+    if (pocErrors !== undefined && pocAiTotal !== undefined && pocAiTotal > 0) {
+      derived.push({
+        date,
+        metricName: 'poc_error_rate_percent',
+        value: Math.round((pocErrors / pocAiTotal) * 100 * 100) / 100,
+      });
+    }
+
+    // Asked for human rate
+    const pocAskedHuman = metrics.get('poc_asked_for_human_count');
+    if (pocAskedHuman !== undefined && pocAiTotal !== undefined && pocAiTotal > 0) {
+      derived.push({
+        date,
+        metricName: 'poc_asked_for_human_rate_percent',
+        value: Math.round((pocAskedHuman / pocAiTotal) * 100 * 100) / 100,
+      });
+    }
+
+    // Back to IVR rate
+    const pocBackToIvr = metrics.get('poc_back_to_ivr_count');
+    if (pocBackToIvr !== undefined && pocAiTotal !== undefined && pocAiTotal > 0) {
+      derived.push({
+        date,
+        metricName: 'poc_back_to_ivr_rate_percent',
+        value: Math.round((pocBackToIvr / pocAiTotal) * 100 * 100) / 100,
+      });
+    }
+
     // Human agent success rates (as percentages of transferred conversations)
     const haResolvedQuestions = metrics.get('human_agent_resolved_questions');
     const haWasCordial = metrics.get('human_agent_was_cordial');

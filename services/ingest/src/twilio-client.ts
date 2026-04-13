@@ -11,19 +11,19 @@ const authToken = process.env.TWILIO_AUTH_TOKEN!;
 export async function fetchOperatorResults(transcriptSid: string): Promise<TwilioOperatorResult[]> {
   const client = Twilio(accountSid, authToken);
 
-  // List operator results to get their SIDs
+  // List operator results to get their SIDs (unredacted)
   const operatorResultList = await client.intelligence.v2
     .transcripts(transcriptSid)
     .operatorResults
-    .list();
+    .list({ redacted: false });
 
-  // Fetch each operator result individually to get full data
+  // Fetch each operator result individually to get full data (unredacted)
   const fullResults = await Promise.all(
     operatorResultList.map(async (summary) => {
       const fullResult = await client.intelligence.v2
         .transcripts(transcriptSid)
         .operatorResults(summary.operatorSid)
-        .fetch();
+        .fetch({ redacted: false });
 
       return {
         operator_sid: fullResult.operatorSid,
@@ -122,18 +122,37 @@ export function computeTimingMetrics(sentences: TranscriptSentence[]): TimingMet
   const agentResponseTimes: number[] = [];
   const customerWaitTimes: number[] = [];
 
+  // Determine which channel is agent and which is customer.
+  // Twilio uses 1-based channels: typically 1 = agent (or IVR/bot), 2 = customer.
+  // But it can vary, so we detect: the channel that speaks first is usually the agent.
+  const firstChannel = sentences[0].mediaChannel;
+  const agentChannel = firstChannel;
+  const customerChannel = sentences.find(s => s.mediaChannel !== firstChannel)?.mediaChannel;
+
+  if (customerChannel === undefined) {
+    // Monologue — only one party spoke, no response times to compute
+    return {
+      handlingTimeSec: Math.round(handlingTimeSec * 100) / 100,
+      avgResponseTimeSec: 0,
+      avgCustomerWaitTimeSec: 0,
+      sentenceCount: sentences.length,
+      agentSentenceCount: sentences.filter(s => s.mediaChannel === agentChannel).length,
+      customerSentenceCount: 0,
+    };
+  }
+
   for (let i = 0; i < sentences.length - 1; i++) {
     const current = sentences[i];
     const next = sentences[i + 1];
 
     // Customer finished, agent responds
-    if (current.mediaChannel === 0 && next.mediaChannel === 1) {
+    if (current.mediaChannel === customerChannel && next.mediaChannel === agentChannel) {
       const gap = next.startTime - current.endTime;
       if (gap >= 0) agentResponseTimes.push(gap);
     }
 
     // Agent finished, customer responds
-    if (current.mediaChannel === 1 && next.mediaChannel === 0) {
+    if (current.mediaChannel === agentChannel && next.mediaChannel === customerChannel) {
       const gap = next.startTime - current.endTime;
       if (gap >= 0) customerWaitTimes.push(gap);
     }
@@ -148,8 +167,8 @@ export function computeTimingMetrics(sentences: TranscriptSentence[]): TimingMet
     avgResponseTimeSec: avg(agentResponseTimes),
     avgCustomerWaitTimeSec: avg(customerWaitTimes),
     sentenceCount: sentences.length,
-    agentSentenceCount: sentences.filter((s) => s.mediaChannel === 1).length,
-    customerSentenceCount: sentences.filter((s) => s.mediaChannel === 0).length,
+    agentSentenceCount: sentences.filter((s) => s.mediaChannel === agentChannel).length,
+    customerSentenceCount: sentences.filter((s) => s.mediaChannel === customerChannel).length,
   };
 }
 

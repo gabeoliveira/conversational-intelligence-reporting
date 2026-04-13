@@ -91,9 +91,9 @@ curl -X POST "$API_URL/webhook/ci" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: poc-customer" \
   -d '{
-    "account_sid": "AC417e8baece9b95537e84eb0fe8fb4e37",
-    "service_sid": "GAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "transcript_sid": "GTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "account_sid": "<your-account-sid>",
+    "service_sid": "<your-service-sid>",
+    "transcript_sid": "<your-transcript-sid>",
     "event_type": "voice_intelligence_transcript_available"
   }'
 ```
@@ -272,11 +272,53 @@ No tests exist yet. Jest is configured in all three services. Here's what to wri
 - Pagination → passes/returns nextToken
 - Limit capping → max 100
 
-### Priority Order for POC
+### Running Tests
 
-If you're short on time, write these first — they cover the new code and the most critical paths:
+All tests are implemented. From the project root:
 
-1. **`computeTimingMetrics`** — pure function, most logic, highest risk of bugs
-2. **`updateTimingAggregates`** — verifies metrics flow to DynamoDB correctly
-3. **`metrics.test.ts` (derived metrics)** — verifies the API computes averages correctly
-4. **`handler.test.ts` (ingest)** — verifies the webhook → S3 → EventBridge flow
+```bash
+# Run all 58 tests
+npm test
+
+# Run a specific test file
+npx jest services/ingest/src/__tests__/timing-metrics.test.ts
+
+# Run tests for a specific service
+npx jest services/ingest
+npx jest services/processor
+npx jest services/api
+
+# Run with verbose output
+npx jest --verbose
+
+# Run in watch mode during development
+npx jest --watch
+```
+
+### Test Suites
+
+| Suite | File | Tests | Coverage |
+|---|---|---|---|
+| Timing metrics | `services/ingest/src/__tests__/timing-metrics.test.ts` | 11 | `computeTimingMetrics` — empty, single sentence, overlapping, monologue, rounding, averages, zero gaps |
+| Signature validation | `services/ingest/src/__tests__/validate-signature.test.ts` | 6 | Valid/invalid signatures, body hash mismatch, tampered body, missing params |
+| Ingest handler | `services/ingest/src/__tests__/handler.test.ts` | 10 | Twilio webhook flow, legacy webhook, request validation, signature check, timing in S3/EventBridge payloads |
+| Processor handler | `services/processor/src/__tests__/handler.test.ts` | 6 | End-to-end processing, timing aggregates trigger, schema failure passthrough, enrichment failure, DynamoDB error retry |
+| Timing aggregates | `services/processor/src/__tests__/timing-aggregates.test.ts` | 4 | DynamoDB sum/count increments, zero value skipping, additive to existing values, date formatting |
+| API metrics | `services/api/src/__tests__/metrics.test.ts` | 11 | All derived metrics (sentiment avg, AHT, response time, customer wait time, transfer rate), date grouping, zero-count guard, date range filtering |
+| API handler | `services/api/src/__tests__/handler.test.ts` | 6 | Route dispatching, CORS headers, OPTIONS preflight, missing tenant 400 |
+
+### What's Tested vs. What's Not
+
+**Tested (unit):**
+- All new timing metrics code (sentence fetching → computation → aggregation → API derivation)
+- Webhook signature validation
+- Ingest handler (both Twilio CI and legacy webhook paths)
+- Processor pipeline (schema validation, enrichment, DynamoDB writes, error handling)
+- API routing and metrics computation
+
+**Not tested (requires deployed environment):**
+- Actual Twilio API calls (mocked in tests — verify with real transcripts in Part 2)
+- DynamoDB read/write against live table (mocked — verify with aws cli in Part 2)
+- EventBridge event delivery (mocked — verify via CloudWatch logs in Part 2)
+- API Gateway request routing (verified by CDK config, test with curl in Part 2)
+- CDK infrastructure synthesis (run `cd infra/cdk && npx cdk synth` to verify)

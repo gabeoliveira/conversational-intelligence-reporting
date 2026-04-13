@@ -87,6 +87,7 @@ export async function handler(
     // 8. Update aggregates (operator metrics + timing metrics if available)
     await updateAggregates({
       tenantId,
+      conversationId,
       operatorName,
       payload: enrichedPayload,
       receivedAt,
