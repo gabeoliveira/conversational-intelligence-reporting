@@ -248,4 +248,4 @@ LOCATION 's3://cirl-curated-{env}-{account}-{region}/conversations/tenant_id=dem
 
 - [Analytics Stack](../cdk/lib/analytics-stack.ts) - Infrastructure definition
 - [Lakehouse Documentation](../../docs/LAKEHOUSE-ARCHITECTURE.md) - Architecture overview
-- [BI Integration Guide](../../docs/06-bi-integration.md) - Connecting BI tools
+- [BI Integration Guide](../../docs/bi-integration.md) - Connecting BI tools

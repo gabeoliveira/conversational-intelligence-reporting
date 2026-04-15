@@ -451,7 +451,7 @@ Customers have two explicit, bounded places to customize:
 - Validation applied at ingestion time
 - Use consolidated schema (`conversation-intelligence`) to reduce Twilio costs
 
-See `docs/02-schema-design.md` for schema design patterns.
+See `docs/schema-design.md` for schema design patterns.
 
 ### Surface 2: Enrichment Hook (one file)
 
@@ -516,10 +516,9 @@ cirl-template/
 ├── package.json
 │
 ├── /docs
-│   ├── 00-blueprint.md              # This document
-│   ├── 01-bi-integration.md         # (Legacy - superceded by 06)
-│   ├── 02-schema-design.md          # Operator schema patterns
-│   └── 06-bi-integration.md         # Complete BI tool setup guides
+│   ├── blueprint.md              # This document
+│   ├── bi-integration.md            # BI tool setup guides (REST API + Athena)
+│   └── schema-design.md          # Operator schema patterns
 │
 ├── /infra
 │   └── /cdk
@@ -636,4 +635,4 @@ This schema combines sentiment, classification (intent), summary, and quality as
 - `classification`: Primary intent, confidence, secondary intents, resolution status
 - `quality`: Virtual agent and human agent quality scores (0-10 CSAT-style)
 
-**Important**: Twilio doesn't support all JSON Schema features. See `docs/02-schema-design.md` for Twilio-compatible schema patterns.
+**Important**: Twilio doesn't support all JSON Schema features. See `docs/schema-design.md` for Twilio-compatible schema patterns.

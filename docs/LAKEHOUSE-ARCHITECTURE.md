@@ -402,6 +402,6 @@ Recommended alarms:
 ## See Also
 
 - [Glue Jobs README](../infra/glue-jobs/README.md) - ETL job details
-- [BI Integration Guide](./06-bi-integration.md) - Connecting BI tools to Athena
+- [BI Integration Guide](./bi-integration.md) - Connecting BI tools to Athena
 - [Metrics Catalog](./05-metrics-catalog.md) - Available metrics
-- [Blueprint](./00-blueprint.md) - Overall architecture
+- [Blueprint](./blueprint.md) - Overall architecture

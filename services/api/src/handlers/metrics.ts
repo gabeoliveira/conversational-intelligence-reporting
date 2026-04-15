@@ -132,13 +132,64 @@ export async function getMetrics(
     allMetrics = allMetrics.filter(m => m.metricName === metric);
   }
 
+  // Apply friendly display names to metric names
+  const displayMetrics = allMetrics.map(m => ({
+    ...m,
+    metricName: friendlyMetricName(m.metricName),
+  }));
+
   return {
-    metrics: allMetrics,
+    metrics: displayMetrics,
     period: {
       from: from.toISOString().split('T')[0],
       to: to.toISOString().split('T')[0],
     },
   };
+}
+
+/**
+ * Convert internal metric names to human-friendly display names.
+ * Strips prefixes, replaces underscores, capitalizes words.
+ */
+function friendlyMetricName(name: string): string {
+  // Topic metrics: poc_topic_atendimento → Atendimento
+  if (name.startsWith('poc_topic_')) {
+    const topic = name.replace('poc_topic_', '');
+    return topic.charAt(0).toUpperCase() + topic.slice(1);
+  }
+
+  // CSAT distribution: poc_csat_3 → CSAT 3
+  if (/^poc_csat_[1-5]$/.test(name)) {
+    return `CSAT ${name.charAt(name.length - 1)}`;
+  }
+
+  // Known metrics with explicit friendly names
+  const displayNames: Record<string, string> = {
+    'conversation_count': 'Conversations',
+    'avg_handling_time_sec': 'Avg Handling Time (s)',
+    'avg_response_time_sec': 'Avg Response Time (s)',
+    'avg_customer_wait_time_sec': 'Avg Customer Wait (s)',
+    'poc_ai_retention_rate_percent': 'AI Retention Rate (%)',
+    'poc_csat_avg': 'Avg CSAT',
+    'poc_error_rate_percent': 'AI Error Rate (%)',
+    'poc_asked_for_human_rate_percent': 'Asked for Human (%)',
+    'poc_back_to_ivr_rate_percent': 'Back to IVR (%)',
+    'sentiment_avg': 'Avg Sentiment',
+    'transfer_rate_percent': 'Transfer Rate (%)',
+    'virtual_agent_quality_avg': 'VA Quality',
+    'human_agent_quality_avg': 'Human Agent Quality',
+    'kpi_precisao_avg': 'Precision',
+    'kpi_cobertura_conhecimento_avg': 'Knowledge Coverage',
+    'kpi_alucinacoes_avg': 'Hallucinations',
+    'kpi_compreensao_avg': 'Comprehension',
+    'kpi_aderencia_avg': 'Adherence',
+    'kpi_desambiguador_rate_percent': 'Disambiguation Rate (%)',
+  };
+
+  if (displayNames[name]) return displayNames[name];
+
+  // Fallback: return as-is
+  return name;
 }
 
 function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {

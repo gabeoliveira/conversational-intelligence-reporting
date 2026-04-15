@@ -338,13 +338,13 @@ DIVIDE(
 - [PowerBI Desktop Download](https://powerbi.microsoft.com/desktop/)
 - [Athena ODBC Driver Documentation](https://docs.aws.amazon.com/athena/latest/ug/connect-with-odbc.html)
 - [PowerBI DAX Reference](https://docs.microsoft.com/dax/)
-- [CIRL BI Integration Guide](../docs/06-bi-integration.md)
+- [CIRL BI Integration Guide](../docs/bi-integration.md)
 - [CIRL API Reference](../docs/04-api-reference.md)
 
 ---
 
 ## Need Help?
 
-- See full BI integration guide: [docs/06-bi-integration.md](../docs/06-bi-integration.md)
+- See full BI integration guide: [docs/bi-integration.md](../docs/bi-integration.md)
 - Report issues: GitHub Issues
 - Check CloudWatch logs for CIRL stack errors

@@ -46,7 +46,7 @@ For AWS users, QuickSight is the easiest SQL-based option:
    - CIRL stack deployed (includes Glue ETL jobs and Athena workgroup)
    - Glue ETL jobs have been run at least once (see CDK output `RunGlueJobsCommands`)
    - QuickSight account in same region
-   - QuickSight permissions for Athena and S3 (see [docs/06-bi-integration.md](../docs/06-bi-integration.md))
+   - QuickSight permissions for Athena and S3 (see [docs/bi-integration.md](../docs/bi-integration.md))
 
 2. **Connect to Athena**:
    - In QuickSight: **Datasets** → **New dataset** → **Athena**
@@ -205,7 +205,7 @@ After importing your first dashboard:
 
 ## Resources
 
-- [Full BI Integration Guide](../docs/06-bi-integration.md)
+- [Full BI Integration Guide](../docs/bi-integration.md)
 - [Dashboard README](README.md) - Detailed import instructions
 - [API Reference](../docs/04-api-reference.md)
 - [Metrics Catalog](../docs/05-metrics-catalog.md)

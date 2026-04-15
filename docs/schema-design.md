@@ -93,7 +93,7 @@ This operator analyzes AI virtual agent performance, conversation topics, and in
 - `inferred_csat` (integer) — Inferred satisfaction 1-5
 - `errors` (boolean) — AI made mistakes (hallucinations, misconceptions)
 
-**Metrics tracked:** See [01-bi-integration.md](./01-bi-integration.md#ai-analytics-metrics-from-analytics-operator) for the full catalog.
+**Metrics tracked:** See [bi-integration.md](./bi-integration.md#ai-analytics-metrics-from-analytics-operator) for the full catalog.
 
 ---
 

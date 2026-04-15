@@ -221,7 +221,9 @@ GET /tenants/{tenantId}/metrics
 Query Parameters:
 - `from` - Start date (default: 30 days ago)
 - `to` - End date (default: today)
-- `metric` - Filter by specific metric name
+- `metric` - Filter by internal metric name (see Available Metrics below)
+
+> **Note:** The `metric` parameter uses internal names (e.g., `poc_topic_atendimento`), but the response `metricName` field returns friendly display names (e.g., `Atendimento`). This makes API responses BI-tool friendly while keeping filter parameters stable.
 
 Response:
 ```json
@@ -271,7 +273,7 @@ Response:
 - `poc_back_to_ivr_rate_percent` - Percentage of conversations where customer returned to IVR
 - `poc_topic_{name}` - Conversation count per topic
 
-See [docs/01-bi-integration.md](docs/01-bi-integration.md) for full metrics catalog.
+See [docs/bi-integration.md](docs/bi-integration.md) for full metrics catalog.
 
 #### List Schemas
 ```http
@@ -323,7 +325,7 @@ LIMIT 10
 
 Direct API access — works the same in both analytics modes.
 
-**See [docs/06-bi-integration.md](docs/06-bi-integration.md) for complete setup guides.**
+**See [docs/bi-integration.md](docs/bi-integration.md) for complete setup guides.**
 
 **Quick Example (QuickSight — Simple Mode):**
 1. In QuickSight, create new dataset → select **Athena**
@@ -429,7 +431,7 @@ See [docs/schema-design.md](docs/schema-design.md) for details on consolidated v
 ├── dashboards/            # BI dashboard templates (Grafana, QuickSight, Tableau, etc.)
 ├── docs/                  # Documentation
 │   ├── LAKEHOUSE-ARCHITECTURE.md  # Lakehouse design (Bronze/Silver/Gold)
-│   └── 06-bi-integration.md      # BI tool setup guides
+│   └── bi-integration.md          # BI tool setup guides
 ├── infra/
 │   ├── cdk/               # AWS CDK infrastructure (3 stacks)
 │   └── glue-jobs/         # Glue ETL scripts (Bronze→Silver→Gold)

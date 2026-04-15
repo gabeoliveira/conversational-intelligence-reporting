@@ -35,14 +35,14 @@ describe('getMetrics', () => {
     expect(result.metrics).toEqual([]);
   });
 
-  it('returns raw metrics from DynamoDB', async () => {
+  it('returns raw metrics with friendly names', async () => {
     mockSend.mockResolvedValue({
       Items: [makeMetricItem('20260127', 'conversation_count', 42)],
     });
     const result = await getMetrics('test', {});
     expect(result.metrics).toContainEqual({
       date: '2026-01-27T00:00:00Z',
-      metricName: 'conversation_count',
+      metricName: 'Conversations',
       value: 42,
     });
   });
@@ -55,7 +55,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avg = result.metrics.find((m) => m.metricName === 'sentiment_avg');
+    const avg = result.metrics.find((m) => m.metricName === 'Avg Sentiment');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(75);
   });
@@ -68,7 +68,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avg = result.metrics.find((m) => m.metricName === 'avg_handling_time_sec');
+    const avg = result.metrics.find((m) => m.metricName === 'Avg Handling Time (s)');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(120);
   });
@@ -81,7 +81,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avg = result.metrics.find((m) => m.metricName === 'avg_response_time_sec');
+    const avg = result.metrics.find((m) => m.metricName === 'Avg Response Time (s)');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(3);
   });
@@ -94,7 +94,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avg = result.metrics.find((m) => m.metricName === 'avg_customer_wait_time_sec');
+    const avg = result.metrics.find((m) => m.metricName === 'Avg Customer Wait (s)');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(2.5);
   });
@@ -107,7 +107,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const rate = result.metrics.find((m) => m.metricName === 'transfer_rate_percent');
+    const rate = result.metrics.find((m) => m.metricName === 'Transfer Rate (%)');
     expect(rate).toBeDefined();
     expect(rate!.value).toBe(30);
   });
@@ -120,7 +120,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avg = result.metrics.find((m) => m.metricName === 'avg_handling_time_sec');
+    const avg = result.metrics.find((m) => m.metricName === 'Avg Handling Time (s)');
     expect(avg).toBeUndefined();
   });
 
@@ -134,7 +134,7 @@ describe('getMetrics', () => {
       ],
     });
     const result = await getMetrics('test', {});
-    const avgs = result.metrics.filter((m) => m.metricName === 'avg_handling_time_sec');
+    const avgs = result.metrics.filter((m) => m.metricName === 'Avg Handling Time (s)');
     expect(avgs).toHaveLength(2);
     expect(avgs.find((m) => m.date === '2026-01-27T00:00:00Z')!.value).toBe(100);
     expect(avgs.find((m) => m.date === '2026-01-28T00:00:00Z')!.value).toBe(100);
@@ -154,5 +154,29 @@ describe('getMetrics', () => {
     const result = await getMetrics('test', { from: '2026-01-01', to: '2026-01-31' });
     expect(result.period.from).toBe('2026-01-01');
     expect(result.period.to).toBe('2026-01-31');
+  });
+
+  it('applies friendly names to topic metrics', async () => {
+    mockSend.mockResolvedValue({
+      Items: [makeMetricItem('20260127', 'poc_topic_atendimento', 5)],
+    });
+    const result = await getMetrics('test', {});
+    expect(result.metrics).toContainEqual({
+      date: '2026-01-27T00:00:00Z',
+      metricName: 'Atendimento',
+      value: 5,
+    });
+  });
+
+  it('applies friendly names to CSAT distribution', async () => {
+    mockSend.mockResolvedValue({
+      Items: [makeMetricItem('20260127', 'poc_csat_4', 10)],
+    });
+    const result = await getMetrics('test', {});
+    expect(result.metrics).toContainEqual({
+      date: '2026-01-27T00:00:00Z',
+      metricName: 'CSAT 4',
+      value: 10,
+    });
   });
 });

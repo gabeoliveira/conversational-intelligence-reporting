@@ -13,7 +13,7 @@ CIRL uses a **lakehouse architecture** (Bronze → Silver → Gold) with S3 Parq
 - Query lakehouse tables via Athena: `SELECT * FROM cirl_{env}.lakehouse_metrics`
 - Clean, flat schemas — no PK/SK parsing or `regexp_extract()` needed
 - All tables are partitioned by `tenant_id`, `year`, `month` (and `day` for conversations/operators)
-- All query examples are in [docs/06-bi-integration.md](../docs/06-bi-integration.md)
+- All query examples are in [docs/bi-integration.md](../docs/bi-integration.md)
 
 The JSON/TWB files provide visualization layouts and references, but **you must update the database/table names** to match your environment.
 
@@ -62,7 +62,7 @@ The JSON/TWB files provide visualization layouts and references, but **you must 
 
 ### QuickSight Import
 
-1. Deploy your CIRL stack and run Glue ETL jobs to populate lakehouse tables (see [docs/06-bi-integration.md](../docs/06-bi-integration.md))
+1. Deploy your CIRL stack and run Glue ETL jobs to populate lakehouse tables (see [docs/bi-integration.md](../docs/bi-integration.md))
 
 2. Update the dashboard template with your environment details:
    ```bash
@@ -97,7 +97,7 @@ The JSON/TWB files provide visualization layouts and references, but **you must 
      AND year = '2026'
    ORDER BY date, metric_name
    ```
-   See [BI Integration Guide](../docs/06-bi-integration.md) for more query examples.
+   See [BI Integration Guide](../docs/bi-integration.md) for more query examples.
 
 5. Create a new Analysis:
    - Use the imported dataset
@@ -169,7 +169,7 @@ aws quicksight create-template \
 4. Update the workbook:
    - Edit `tableau-cirl-workbook.twb` in a text editor
    - Replace connection placeholders and database/table names
-   - See [BI Integration Guide](../docs/06-bi-integration.md) for complete query examples
+   - See [BI Integration Guide](../docs/bi-integration.md) for complete query examples
 
 5. Open the workbook:
    - Open `tableau-cirl-workbook.twb` in Tableau Desktop
@@ -181,7 +181,7 @@ aws quicksight create-template \
 1. Set up Athena connection in Metabase:
    - Go to **Admin** → **Databases** → **Add database**
    - Select **Amazon Athena**
-   - Configure connection details (see [docs/06-bi-integration.md](../docs/06-bi-integration.md))
+   - Configure connection details (see [docs/bi-integration.md](../docs/bi-integration.md))
    - Region: Your AWS region
    - S3 Staging Directory: `s3://cirl-athena-{env}-{account}-{region}/results/`
    - Workgroup: `cirl-{env}`
@@ -195,7 +195,7 @@ aws quicksight create-template \
      AND year = '2026'
    ORDER BY date
    ```
-   See [BI Integration Guide](../docs/06-bi-integration.md) for more examples.
+   See [BI Integration Guide](../docs/bi-integration.md) for more examples.
 
 3. Update the collection JSON:
    ```bash
@@ -244,7 +244,7 @@ The dashboard templates provide these visualization types. Lakehouse tables have
    - Top intents detected - From `lakehouse_metrics` intent count metrics
    - Intent confidence levels - From `lakehouse_metrics` confidence metrics
 
-**Query Examples**: See [docs/06-bi-integration.md](../docs/06-bi-integration.md) for complete SQL examples for each visualization type.
+**Query Examples**: See [docs/bi-integration.md](../docs/bi-integration.md) for complete SQL examples for each visualization type.
 
 ---
 
@@ -307,6 +307,6 @@ Screenshots of each dashboard are available in the `screenshots/` directory:
 
 ## Need Help?
 
-- Full BI integration guide: [docs/06-bi-integration.md](../docs/06-bi-integration.md)
+- Full BI integration guide: [docs/bi-integration.md](../docs/bi-integration.md)
 - API reference: [docs/04-api-reference.md](../docs/04-api-reference.md)
 - Report issues: [GitHub Issues](https://github.com/your-org/cirl/issues)
