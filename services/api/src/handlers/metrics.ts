@@ -38,11 +38,61 @@ export async function getMetrics(
     ':toSk': `DAY#${toDate}#METRIC#zzzzzzzz`,
   };
 
-  // Filter by specific metric if provided
+  // Derived metrics are computed from raw sum/count pairs.
+  // If the caller requests a derived metric, we need to fetch the raw ingredients
+  // instead of filtering literally (the derived metric doesn't exist in DynamoDB).
+  const derivedMetricDependencies: Record<string, string[]> = {
+    'sentiment_avg': ['sentiment_score_sum', 'sentiment_score_count'],
+    'summary_avg_words': ['summary_word_count_sum', 'summary_word_count_count'],
+    'classification_avg_confidence': ['classification_confidence_sum', 'classification_confidence_count'],
+    'pii_avg_entities_per_conversation': ['pii_entities_detected', 'pii_conversations_with_entities'],
+    'intent_avg_confidence': ['intent_confidence_sum', 'intent_confidence_count'],
+    'virtual_agent_quality_avg': ['virtual_agent_quality_sum', 'virtual_agent_quality_count'],
+    'human_agent_quality_avg': ['human_agent_quality_sum', 'human_agent_quality_count'],
+    'transfer_rate_percent': ['human_agent_transfers', 'conversation_count'],
+    'avg_handling_time_sec': ['handling_time_sum', 'handling_time_count'],
+    'avg_response_time_sec': ['response_time_sum', 'response_time_count'],
+    'avg_customer_wait_time_sec': ['customer_wait_time_sum', 'customer_wait_time_count'],
+    'poc_csat_avg': ['poc_csat_sum', 'poc_csat_count'],
+    'poc_ai_retention_rate_percent': ['poc_ai_retained_count', 'poc_ai_retained_total'],
+    'poc_error_rate_percent': ['poc_errors_count', 'poc_ai_retained_total'],
+    'poc_asked_for_human_rate_percent': ['poc_asked_for_human_count', 'poc_ai_retained_total'],
+    'poc_back_to_ivr_rate_percent': ['poc_back_to_ivr_count', 'poc_ai_retained_total'],
+    // General KPIs averages
+    'kpi_precisao_avg': ['kpi_precisao_sum', 'kpi_precisao_count'],
+    'kpi_cobertura_conhecimento_avg': ['kpi_cobertura_conhecimento_sum', 'kpi_cobertura_conhecimento_count'],
+    'kpi_alucinacoes_avg': ['kpi_alucinacoes_sum', 'kpi_alucinacoes_count'],
+    'kpi_compreensao_avg': ['kpi_compreensao_sum', 'kpi_compreensao_count'],
+    'kpi_aderencia_avg': ['kpi_aderencia_sum', 'kpi_aderencia_count'],
+    'kpi_desambiguador_rate_percent': ['kpi_desambiguador_count', 'kpi_desambiguador_total'],
+    // Percent metrics that depend on conversation_count
+    'virtual_agent_resolved_questions_percent': ['virtual_agent_resolved_questions', 'conversation_count'],
+    'virtual_agent_resolved_without_human_percent': ['virtual_agent_resolved_without_human', 'conversation_count'],
+    'virtual_agent_avoided_hallucinations_percent': ['virtual_agent_avoided_hallucinations', 'conversation_count'],
+    'virtual_agent_avoided_repetitions_percent': ['virtual_agent_avoided_repetitions', 'conversation_count'],
+    'virtual_agent_maintained_consistency_percent': ['virtual_agent_maintained_consistency', 'conversation_count'],
+    'human_agent_resolved_questions_percent': ['human_agent_resolved_questions', 'human_agent_transfers'],
+    'human_agent_was_cordial_percent': ['human_agent_was_cordial', 'human_agent_transfers'],
+    'human_agent_avoided_repetitions_percent': ['human_agent_avoided_repetitions', 'human_agent_transfers'],
+    'human_agent_resolved_problem_percent': ['human_agent_resolved_problem', 'human_agent_transfers'],
+    'human_agent_clear_closing_percent': ['human_agent_clear_closing', 'human_agent_transfers'],
+  };
+
+  const isDerived = metric ? metric in derivedMetricDependencies : false;
+  const rawMetricsToFetch = isDerived ? derivedMetricDependencies[metric!] : null;
+
+  // Filter by specific metric if provided (and it's a raw metric, not derived)
   let filterExpression: string | undefined;
-  if (metric) {
+  if (metric && !isDerived) {
     filterExpression = 'metricName = :metricName';
     expressionValues[':metricName'] = metric;
+  } else if (rawMetricsToFetch) {
+    // Fetch only the raw ingredients needed for the derived metric
+    const conditions = rawMetricsToFetch.map((_, i) => `metricName = :mn${i}`);
+    filterExpression = `(${conditions.join(' OR ')})`;
+    rawMetricsToFetch.forEach((name, i) => {
+      expressionValues[`:mn${i}`] = name;
+    });
   }
 
   const result = await docClient.send(
@@ -58,8 +108,14 @@ export async function getMetrics(
     // Parse payload to access entity-specific fields (spine + payload pattern)
     const payload = item.payload ? JSON.parse(item.payload as string) : {};
 
+    // Convert YYYYMMDD to ISO date for BI tool compatibility
+    const rawDate = item.date as string;
+    const isoDate = rawDate.length === 8
+      ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}T00:00:00Z`
+      : rawDate;
+
     return {
-      date: item.date as string,
+      date: isoDate,
       metricName: item.metricName as string,
       value: payload.value as number,
     };
@@ -68,8 +124,16 @@ export async function getMetrics(
   // Compute derived metrics (e.g., sentiment average)
   const computedMetrics = computeDerivedMetrics(metrics);
 
+  let allMetrics = [...metrics, ...computedMetrics];
+
+  // If caller requested a specific derived metric, return only that metric
+  // (not the raw ingredients used to compute it)
+  if (metric && isDerived) {
+    allMetrics = allMetrics.filter(m => m.metricName === metric);
+  }
+
   return {
-    metrics: [...metrics, ...computedMetrics],
+    metrics: allMetrics,
     period: {
       from: from.toISOString().split('T')[0],
       to: to.toISOString().split('T')[0],
@@ -304,6 +368,37 @@ function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {
         date,
         metricName: 'poc_back_to_ivr_rate_percent',
         value: Math.round((pocBackToIvr / pocAiTotal) * 100 * 100) / 100,
+      });
+    }
+
+    // General KPIs derived metrics (averages from sum/count)
+    const kpiFields = [
+      'kpi_precisao',
+      'kpi_cobertura_conhecimento',
+      'kpi_alucinacoes',
+      'kpi_compreensao',
+      'kpi_aderencia',
+    ];
+    for (const kpi of kpiFields) {
+      const sum = metrics.get(`${kpi}_sum`);
+      const count = metrics.get(`${kpi}_count`);
+      if (sum !== undefined && count !== undefined && count > 0) {
+        derived.push({
+          date,
+          metricName: `${kpi}_avg`,
+          value: Math.round((sum / count) * 100) / 100,
+        });
+      }
+    }
+
+    // Desambiguador rate (percentage of conversations needing disambiguation)
+    const desambiguadorCount = metrics.get('kpi_desambiguador_count');
+    const desambiguadorTotal = metrics.get('kpi_desambiguador_total');
+    if (desambiguadorCount !== undefined && desambiguadorTotal !== undefined && desambiguadorTotal > 0) {
+      derived.push({
+        date,
+        metricName: 'kpi_desambiguador_rate_percent',
+        value: Math.round((desambiguadorCount / desambiguadorTotal) * 100 * 100) / 100,
       });
     }
 

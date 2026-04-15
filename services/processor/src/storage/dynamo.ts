@@ -430,6 +430,38 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
       await incrementMetric(tenantId, date, 'poc_errors_count', 1);
     }
   }
+
+  // General KPIs operator (FriendlyName: "MVP - Inter - General KPIs")
+  // Tracks integer scores (0-10 or similar) for AI quality dimensions.
+  // NOTE: Matching by friendly name is fragile — if renamed in Twilio Console,
+  // aggregation silently stops. For production, consider matching by operator SID
+  // or using a config mapping (e.g., env var or DynamoDB config table).
+  if (operatorName === 'MVP - Inter - General KPIs') {
+    const intMetrics: Array<{ field: string; metric: string }> = [
+      { field: 'precisao', metric: 'kpi_precisao' },
+      { field: 'cobertura_conhecimento', metric: 'kpi_cobertura_conhecimento' },
+      { field: 'alucinacoes', metric: 'kpi_alucinacoes' },
+      { field: 'compreensao', metric: 'kpi_compreensao' },
+      { field: 'aderencia', metric: 'kpi_aderencia' },
+    ];
+
+    for (const { field, metric } of intMetrics) {
+      const value = payload[field] as number;
+      if (typeof value === 'number') {
+        await incrementMetric(tenantId, date, `${metric}_sum`, value);
+        await incrementMetric(tenantId, date, `${metric}_count`, 1);
+      }
+    }
+
+    // Desambiguador (boolean) — track how often disambiguation was needed
+    const desambiguador = payload.desambiguador;
+    if (typeof desambiguador === 'boolean' && desambiguador) {
+      await incrementMetric(tenantId, date, 'kpi_desambiguador_count', 1);
+    }
+    if (typeof desambiguador === 'boolean') {
+      await incrementMetric(tenantId, date, 'kpi_desambiguador_total', 1);
+    }
+  }
 }
 
 /**

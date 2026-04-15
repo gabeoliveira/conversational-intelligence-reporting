@@ -12,6 +12,7 @@
     "deploy:demo": "export DOTENV_CONFIG_PATH=$(pwd)/.env.demo && cd infra/cdk && npm run deploy -- --context env=demo",
     "deploy:poc": "export DOTENV_CONFIG_PATH=$(pwd)/.env.poc && cd infra/cdk && npm run deploy -- --context env=poc",
     "destroy": "cd infra/cdk && npm run destroy",
+    "backfill": "npx ts-node scripts/backfill-aggregates.ts",
     "demo:seed": "npx ts-node scripts/seed-demo-data.ts",
     "demo:replay": "npx ts-node scripts/replay-webhooks.ts"
   },

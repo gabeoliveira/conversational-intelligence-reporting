@@ -41,7 +41,7 @@ describe('getMetrics', () => {
     });
     const result = await getMetrics('test', {});
     expect(result.metrics).toContainEqual({
-      date: '20260127',
+      date: '2026-01-27T00:00:00Z',
       metricName: 'conversation_count',
       value: 42,
     });
@@ -136,8 +136,8 @@ describe('getMetrics', () => {
     const result = await getMetrics('test', {});
     const avgs = result.metrics.filter((m) => m.metricName === 'avg_handling_time_sec');
     expect(avgs).toHaveLength(2);
-    expect(avgs.find((m) => m.date === '20260127')!.value).toBe(100);
-    expect(avgs.find((m) => m.date === '20260128')!.value).toBe(100);
+    expect(avgs.find((m) => m.date === '2026-01-27T00:00:00Z')!.value).toBe(100);
+    expect(avgs.find((m) => m.date === '2026-01-28T00:00:00Z')!.value).toBe(100);
   });
 
   it('returns correct period with default dates', async () => {

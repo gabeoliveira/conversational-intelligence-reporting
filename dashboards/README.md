@@ -49,6 +49,13 @@ The JSON/TWB files provide visualization layouts and references, but **you must 
 - **Features**: Complete instructions for creating CIRL dashboard with DAX measures, visuals, and data transforms
 - **Import**: See [PowerBI Setup Guide](powerbi-setup-guide.md)
 
+### Grafana POC (AI Virtual Agent Analytics)
+- **File**: `grafana-poc-dashboard.json`
+- **Type**: Grafana dashboard JSON (uses Infinity plugin with JSONata parser)
+- **Features**: AI retention rate, inferred CSAT, error rate, handling time, response time, topics distribution, CSAT distribution, conversations table
+- **Best for**: POC demos using `CIRL_ANALYTICS=none` mode with REST API
+- **Import**: Grafana UI → Dashboards → Import → upload JSON. Set API URL and Tenant ID template variables after import.
+
 ---
 
 ## Import Guides

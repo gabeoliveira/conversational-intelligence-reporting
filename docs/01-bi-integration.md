@@ -353,6 +353,44 @@ PII Detection Rate =
 
 ### Adding Custom Metrics
 
+### Timing Metrics (from Transcript Sentences)
+
+| Metric Name | Type | Description |
+|-------------|------|-------------|
+| `handling_time_sum` | Sum | Total handling time in seconds |
+| `handling_time_count` | Counter | Number of conversations with timing data |
+| `avg_handling_time_sec` | Computed | Average conversation duration (seconds) |
+| `response_time_sum` | Sum | Total agent response time in seconds |
+| `response_time_count` | Counter | Number of response time measurements |
+| `avg_response_time_sec` | Computed | Average time for agent to respond after customer finishes (seconds) |
+| `customer_wait_time_sum` | Sum | Total customer wait time in seconds |
+| `customer_wait_time_count` | Counter | Number of customer wait time measurements |
+| `avg_customer_wait_time_sec` | Computed | Average time for customer to respond after agent finishes (seconds) |
+| `sentence_count_total` | Counter | Total transcript sentences processed |
+| `agent_sentence_count` | Counter | Total agent sentences |
+| `customer_sentence_count` | Counter | Total customer sentences |
+
+### AI Analytics Metrics (from Analytics Operator)
+
+| Metric Name | Type | Description |
+|-------------|------|-------------|
+| `poc_ai_retained_count` | Counter | Conversations resolved by AI without human transfer |
+| `poc_ai_retained_total` | Counter | Total conversations assessed for AI retention |
+| `poc_ai_retention_rate_percent` | Computed | % of conversations resolved by AI (retained / total * 100) |
+| `poc_csat_sum` | Sum | Total inferred CSAT scores |
+| `poc_csat_count` | Counter | Number of CSAT assessments |
+| `poc_csat_avg` | Computed | Average inferred CSAT (1-5 scale) |
+| `poc_csat_{1-5}` | Counter | CSAT score distribution (count per score) |
+| `poc_topic_{name}` | Counter | Conversation count per topic |
+| `poc_errors_count` | Counter | Conversations with AI errors |
+| `poc_error_rate_percent` | Computed | % of conversations with AI errors |
+| `poc_asked_for_human_count` | Counter | Conversations where customer asked for human |
+| `poc_asked_for_human_rate_percent` | Computed | % of conversations where customer asked for human |
+| `poc_back_to_ivr_count` | Counter | Conversations where customer returned to IVR |
+| `poc_back_to_ivr_rate_percent` | Computed | % of conversations where customer returned to IVR |
+
+### Adding Custom Metrics
+
 See [README.md - Customization](../README.md#add-custom-metrics) for how to add your own metrics.
 
 ---

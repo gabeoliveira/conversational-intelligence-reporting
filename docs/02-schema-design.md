@@ -79,6 +79,24 @@ See the [JSON Schema Compatibility](#json-schema-compatibility) section below fo
 
 ---
 
+## AI Analytics Operator
+
+**Location:** `config/schemas/poc-analytics/v1.schema.json`
+
+This operator analyzes AI virtual agent performance, conversation topics, and inferred satisfaction. Designed for `GenerativeJSON` operator type.
+
+**Fields:**
+- `ai_retained` (boolean) — Whether the AI resolved without human transfer
+- `topic` (string) — Conversation topic in one word (Portuguese)
+- `back_to_ivr` (boolean) — Customer returned to IVR
+- `asked_for_human` (boolean) — Customer asked for a human agent
+- `inferred_csat` (integer) — Inferred satisfaction 1-5
+- `errors` (boolean) — AI made mistakes (hallucinations, misconceptions)
+
+**Metrics tracked:** See [01-bi-integration.md](./01-bi-integration.md#ai-analytics-metrics-from-analytics-operator) for the full catalog.
+
+---
+
 ## Legacy: Separate Operators
 
 **Note:** These schemas are maintained for backward compatibility but not recommended for new deployments.

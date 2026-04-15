@@ -113,10 +113,20 @@ export interface TranscriptSentence {
  * - sentenceCount: total number of sentences
  * - agentSentenceCount / customerSentenceCount: per-role counts
  */
+// Maximum plausible call duration (2 hours). Anything above this indicates
+// corrupted timestamp data (e.g., absolute Unix timestamps instead of relative offsets).
+const MAX_HANDLING_TIME_SEC = 7200;
+
 export function computeTimingMetrics(sentences: TranscriptSentence[]): TimingMetrics | null {
   if (sentences.length === 0) return null;
 
   const handlingTimeSec = sentences[sentences.length - 1].endTime - sentences[0].startTime;
+
+  // Sanity check: discard results with implausible handling times
+  if (handlingTimeSec < 0 || handlingTimeSec > MAX_HANDLING_TIME_SEC) {
+    console.warn(`Discarding timing metrics: handlingTimeSec=${handlingTimeSec} exceeds max ${MAX_HANDLING_TIME_SEC}s`);
+    return null;
+  }
 
   // Compute response times: time from customer utterance end → next agent utterance start
   const agentResponseTimes: number[] = [];

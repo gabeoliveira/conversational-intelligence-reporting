@@ -55,7 +55,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=poc_ai_retention_rate_percent",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -99,7 +99,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=poc_csat_avg",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -138,7 +138,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=poc_error_rate_percent",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -177,7 +177,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=poc_asked_for_human_rate_percent",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -216,7 +216,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=poc_back_to_ivr_rate_percent",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -263,7 +263,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=avg_handling_time_sec",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -303,7 +303,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=avg_response_time_sec",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -340,7 +340,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&metric=conversation_count",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics"
         }
@@ -390,7 +390,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics",
           "columns": [
@@ -450,7 +450,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/metrics?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "metrics",
           "columns": [
@@ -509,7 +509,7 @@
           "type": "json",
           "url": "${API_URL}/tenants/${TENANT_ID}/conversations?from=${__from:date:YYYY-MM-DD}&to=${__to:date:YYYY-MM-DD}&limit=100",
           "method": "GET",
-          "parser": "backend",
+          "parser": "jsonata",
           "source": "url",
           "root_selector": "items",
           "columns": [

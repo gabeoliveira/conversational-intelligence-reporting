@@ -2,11 +2,12 @@
 
 CIRL provides multiple ways to connect Business Intelligence tools, making it BI-agnostic while providing native support for popular platforms.
 
-> **Which analytics mode are you using?** CIRL supports two modes:
-> - **Simple** (default, `CIRL_ANALYTICS=simple`): Athena queries DynamoDB directly. Sections marked **(Simple)** apply to you.
+> **Which analytics mode are you using?** CIRL supports three modes:
+> - **None** (default, `CIRL_ANALYTICS=none`): REST API only — no Athena. Use Grafana, Metabase, or custom dashboards. This guide's Athena sections don't apply to you.
+> - **Simple** (`CIRL_ANALYTICS=simple`): Athena queries DynamoDB directly. Sections marked **(Simple)** apply to you.
 > - **Lakehouse** (`CIRL_ANALYTICS=lakehouse`): Athena queries S3 Parquet tables. Sections marked **(Lakehouse)** apply to you.
 >
-> The REST API works the same in both modes.
+> The REST API works the same in all modes.
 
 ## Architecture Overview
 
@@ -60,7 +61,7 @@ See the [Dashboard README](../dashboards/README.md) for detailed import instruct
 
 ## Connection Methods
 
-### 1a. Athena DynamoDB Connector — Simple Mode (Default)
+### 1a. Athena DynamoDB Connector — Simple Mode
 
 **Best for:** Getting started, <100K conversations/month, zero operational overhead
 
@@ -71,7 +72,7 @@ See the [Dashboard README](../dashboards/README.md) for detailed import instruct
 - Trade-off: higher per-query cost, DynamoDB PK/SK patterns require parsing
 
 **Setup:**
-Deployed automatically when `CIRL_ANALYTICS=simple` (the default).
+Deployed when `CIRL_ANALYTICS=simple`.
 
 After deployment, you'll see these outputs:
 - `AthenaCatalogName`: Catalog for DynamoDB queries (e.g., `cirl_dynamo_demo`)

@@ -272,6 +272,36 @@ No tests exist yet. Jest is configured in all three services. Here's what to wri
 - Pagination → passes/returns nextToken
 - Limit capping → max 100
 
+### Backfilling Aggregates
+
+If you add a new operator aggregation block (in `dynamo.ts`) after data has already been ingested, existing operator results won't have metrics computed. Use the backfill script to re-compute aggregates from stored data without retriggering webhooks.
+
+```bash
+# Dry run — preview what would be written, no changes made
+DOTENV_CONFIG_PATH=$(pwd)/.env.poc BACKFILL_DRY_RUN=true npm run backfill
+
+# Backfill a specific operator only
+DOTENV_CONFIG_PATH=$(pwd)/.env.poc BACKFILL_OPERATOR="MVP - Inter - General KPIs" npm run backfill
+
+# Backfill all operators
+DOTENV_CONFIG_PATH=$(pwd)/.env.poc npm run backfill
+```
+
+**Environment variables:**
+
+| Variable | Description | Default |
+|---|---|---|
+| `DOTENV_CONFIG_PATH` | Path to env file | `.env` |
+| `BACKFILL_TENANT` | Tenant to backfill | `CIRL_TENANT_ID` from env |
+| `BACKFILL_OPERATOR` | Only backfill this operator (by friendly name) | All operators |
+| `BACKFILL_DRY_RUN` | Set to `true` to preview without writing | `false` |
+
+**Important:**
+- Always do a dry run first to verify the output
+- The script **adds** to existing metric values — running it twice will double-count
+- If you need to re-run, delete the relevant metrics from DynamoDB first
+- The script reads `enrichedPayload` from stored operator results, so data must already be ingested
+
 ### Running Tests
 
 All tests are implemented. From the project root:

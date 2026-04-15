@@ -157,7 +157,8 @@ CIRL transforms Conversational Intelligence (CI) operator results (JSON) into qu
 
 CIRL supports two analytics modes, controlled by the `CIRL_ANALYTICS` environment variable:
 
-- **`simple`** (default): Athena queries DynamoDB directly via federated query. No ETL, no Parquet. Best for getting started and <100K conversations/month.
+- **`none`** (default): No analytics stack. REST API only (Grafana, Metabase, custom dashboards). Zero operational overhead.
+- **`simple`**: Athena queries DynamoDB directly via federated query. No ETL, no Parquet. Best for SQL-based BI tools and <100K conversations/month.
 - **`lakehouse`**: Glue ETL transforms raw JSON into S3 Parquet (Bronze → Silver → Gold). Best for >100K conversations/month and heavy analytics.
 
 Both modes share the same DynamoDB table, REST API, and ingestion pipeline. They only differ in how BI tools query data via Athena.
