@@ -223,7 +223,7 @@ Query Parameters:
 - `to` - End date (default: today)
 - `metric` - Filter by internal metric name (see Available Metrics below)
 
-> **Note:** The `metric` parameter uses internal names (e.g., `poc_topic_atendimento`), but the response `metricName` field returns friendly display names (e.g., `Atendimento`). This makes API responses BI-tool friendly while keeping filter parameters stable.
+> **Note:** The response includes both `metricName` (internal, e.g., `poc_topic_atendimento`) and `displayName` (friendly, e.g., `Atendimento`). The `metric` filter parameter uses internal names. Use `displayName` for chart labels and legends in BI tools.
 
 Response:
 ```json
@@ -548,6 +548,29 @@ The REST API currently has no authentication. Planned options:
 - **Cognito/JWT** — for multi-tenant deployments with user-level access control. Requires more setup but enables proper RBAC.
 
 Controlled via `CIRL_AUTH=none|apikey|cognito` environment variable.
+
+### Hourly Aggregation Granularity (Planned)
+
+Metrics are currently aggregated per day. For customers who need intraday trends (e.g., peak hours, shift-level analysis), hourly aggregation will be added:
+
+- The processor writes to both `DAY#YYYYMMDD#METRIC#...` and `HOUR#YYYYMMDDHH#METRIC#...` keys
+- The API accepts a `granularity=day|hour` query parameter
+- Doubles DynamoDB write volume — negligible at low scale, relevant at 200K+ conversations/month
+- Backward compatible: defaults to `day`, existing dashboards unaffected
+
+### Duplicate Transcript Deduplication (Planned)
+
+Twilio Conversational Intelligence can emit multiple transcripts for the same call (e.g., from dual-channel recording). Currently, CIRL processes each transcript independently, which can double-count metrics.
+
+**Known limitation:** If the same call produces two transcripts, operator results and metrics are processed twice.
+
+**Planned fix:** Deduplicate by call SID (`CA...`) or conversation SID (`CH...`) at ingestion time:
+1. Ingest Lambda extracts `call_sid` from transcript's `channel.media_properties.reference_sids`
+2. Conditional put on a `TENANT#{tenantId}#SEEN_CALL#{callSid}` marker in DynamoDB
+3. If marker exists → skip processing (return 202 "already processed")
+4. If new → process normally
+
+This ensures only the first transcript per call is processed, regardless of how many transcripts Twilio emits.
 
 ### DynamoDB: Keep or Remove?
 

@@ -52,7 +52,7 @@ Works with all analytics modes (`none`, `simple`, `lakehouse`). No AWS credentia
 | `GET /tenants/{tenantId}/conversations?from=&to=&agentId=&queueId=&customerKey=` | Conversation list with filters |
 | `GET /tenants/{tenantId}/conversations/{conversationId}` | Single conversation with operator results |
 
-> **Note:** The `metric` filter parameter uses internal names (e.g., `poc_topic_atendimento`), but the response returns friendly display names (e.g., `Atendimento`). Topic names are capitalized, CSAT scores show as `CSAT 1`–`CSAT 5`, and common metrics have human-readable labels. This makes BI tool legends and charts readable without transformations.
+> **Note:** The response includes both `metricName` (internal, e.g., `poc_topic_atendimento`) and `displayName` (friendly, e.g., `Atendimento`). The `metric` filter parameter uses internal names. Use `displayName` for chart labels and `metricName` for filtering.
 
 ### Grafana Setup
 

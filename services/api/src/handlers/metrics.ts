@@ -132,10 +132,10 @@ export async function getMetrics(
     allMetrics = allMetrics.filter(m => m.metricName === metric);
   }
 
-  // Apply friendly display names to metric names
+  // Add friendly display names alongside internal names
   const displayMetrics = allMetrics.map(m => ({
     ...m,
-    metricName: friendlyMetricName(m.metricName),
+    displayName: friendlyMetricName(m.metricName),
   }));
 
   return {
