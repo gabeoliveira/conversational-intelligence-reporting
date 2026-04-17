@@ -170,7 +170,7 @@ Query Parameters:
 - `agentId` - Filter by agent
 - `queueId` - Filter by queue
 - `customerKey` - Filter by customer
-- `limit` - Max results (default: 50, max: 100)
+- `limit` - Max results (default: 50, max: 500)
 - `nextToken` - Pagination token
 
 Response:
@@ -269,9 +269,15 @@ Response:
 - `poc_ai_retention_rate_percent` - Percentage of conversations resolved by AI without human transfer
 - `poc_csat_avg` - Average inferred customer satisfaction (1-5 scale)
 - `poc_error_rate_percent` - Percentage of conversations with AI errors (hallucinations, misconceptions)
-- `poc_asked_for_human_rate_percent` - Percentage of conversations where customer asked for a human
 - `poc_back_to_ivr_rate_percent` - Percentage of conversations where customer returned to IVR
-- `poc_topic_{name}` - Conversation count per topic
+- `poc_topic_{name}` - Conversation count per primary topic
+- `poc_subtopic_{primary_-_subtopic}` - Conversation count per topic-subtopic combination
+
+*Handoff Reasons:*
+- `poc_handoff_customer_request_rate_percent` - % of conversations where customer requested a human
+- `poc_handoff_lack_of_comprehension_rate_percent` - % where AI failed to understand the customer
+- `poc_handoff_lack_of_knowledge_rate_percent` - % where AI lacked knowledge to answer
+- `poc_handoff_total` - Total conversations with any handoff
 
 See [docs/bi-integration.md](docs/bi-integration.md) for full metrics catalog.
 
@@ -571,6 +577,33 @@ Twilio Conversational Intelligence can emit multiple transcripts for the same ca
 4. If new → process normally
 
 This ensures only the first transcript per call is processed, regardless of how many transcripts Twilio emits.
+
+### Operator Field Indexing for Drill-Down Queries (Planned)
+
+Currently, there's no way to query "all conversations where operator field X = Y" without scanning all operator results. This limits drill-down capabilities (e.g., "show me all conversations where the handoff reason was lack of knowledge").
+
+**Planned approach:** Write denormalized index records at ingestion time:
+
+```
+PK: TENANT#{tenantId}#OPFIELD#{fieldName}#{fieldValue}
+SK: TS#{timestamp}#CONV#{conversationId}
+```
+
+For example, a conversation with `motivo_handoff = falta_de_conhecimento` would produce:
+```
+PK: TENANT#poc-inter#OPFIELD#motivo_handoff#falta_de_conhecimento
+SK: TS#20260415143000#CONV#GT123
+```
+
+This enables O(1) lookups: "give me all conversations with this handoff reason" is a single DynamoDB query on that PK, paginated and sorted by time.
+
+**What's needed:**
+1. Config declares which operator fields to index (ties into config-driven primitives)
+2. Processor writes index records alongside operator results (one extra write per indexed field)
+3. New API endpoint: `GET /tenants/{id}/conversations?operatorField={field}&operatorValue={value}`
+4. Cost: ~1 extra DynamoDB write per indexed field per operator result (negligible at <200K conversations/month)
+
+**Current workaround:** For small datasets (<10K conversations), use BI tool client-side filtering (e.g., Grafana transformations) to filter the conversations table by operator result fields.
 
 ### DynamoDB: Keep or Remove?
 

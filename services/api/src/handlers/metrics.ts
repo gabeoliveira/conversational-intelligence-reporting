@@ -58,6 +58,10 @@ export async function getMetrics(
     'poc_error_rate_percent': ['poc_errors_count', 'poc_ai_retained_total'],
     'poc_asked_for_human_rate_percent': ['poc_asked_for_human_count', 'poc_ai_retained_total'],
     'poc_back_to_ivr_rate_percent': ['poc_back_to_ivr_count', 'poc_ai_retained_total'],
+    // Handoff reason rates (as % of all conversations)
+    'poc_handoff_customer_request_rate_percent': ['poc_handoff_customer_request', 'conversation_count'],
+    'poc_handoff_lack_of_comprehension_rate_percent': ['poc_handoff_lack_of_comprehension', 'conversation_count'],
+    'poc_handoff_lack_of_knowledge_rate_percent': ['poc_handoff_lack_of_knowledge', 'conversation_count'],
     // General KPIs averages
     'kpi_precisao_avg': ['kpi_precisao_sum', 'kpi_precisao_count'],
     'kpi_cobertura_conhecimento_avg': ['kpi_cobertura_conhecimento_sum', 'kpi_cobertura_conhecimento_count'],
@@ -121,10 +125,14 @@ export async function getMetrics(
     };
   });
 
-  // Compute derived metrics (e.g., sentiment average)
+  // Compute derived metrics per day (for time series charts)
   const computedMetrics = computeDerivedMetrics(metrics);
 
-  let allMetrics = [...metrics, ...computedMetrics];
+  // Compute period-level aggregates (sum across all days, then derive)
+  // This gives correct rates/averages for stat panels over a date range
+  const periodMetrics = computePeriodMetrics(metrics);
+
+  let allMetrics = [...metrics, ...computedMetrics, ...periodMetrics];
 
   // If caller requested a specific derived metric, return only that metric
   // (not the raw ingredients used to compute it)
@@ -152,10 +160,14 @@ export async function getMetrics(
  * Strips prefixes, replaces underscores, capitalizes words.
  */
 function friendlyMetricName(name: string): string {
-  // Topic metrics: poc_topic_atendimento → Atendimento
+  // Subtopic metrics (combined): poc_subtopic_renda_fixa_-_resgate → Renda Fixa - Resgate
+  if (name.startsWith('poc_subtopic_')) {
+    return titleCase(name.replace('poc_subtopic_', ''));
+  }
+
+  // Primary topic metrics: poc_topic_renda_fixa → Renda Fixa
   if (name.startsWith('poc_topic_')) {
-    const topic = name.replace('poc_topic_', '');
-    return topic.charAt(0).toUpperCase() + topic.slice(1);
+    return titleCase(name.replace('poc_topic_', ''));
   }
 
   // CSAT distribution: poc_csat_3 → CSAT 3
@@ -174,6 +186,13 @@ function friendlyMetricName(name: string): string {
     'poc_error_rate_percent': 'AI Error Rate (%)',
     'poc_asked_for_human_rate_percent': 'Asked for Human (%)',
     'poc_back_to_ivr_rate_percent': 'Back to IVR (%)',
+    'poc_handoff_customer_request': 'Handoff: Customer Request',
+    'poc_handoff_lack_of_comprehension': 'Handoff: Lack of Comprehension',
+    'poc_handoff_lack_of_knowledge': 'Handoff: Lack of Knowledge',
+    'poc_handoff_total': 'Total Handoffs',
+    'poc_handoff_customer_request_rate_percent': 'Handoff: Customer Request (%)',
+    'poc_handoff_lack_of_comprehension_rate_percent': 'Handoff: Comprehension (%)',
+    'poc_handoff_lack_of_knowledge_rate_percent': 'Handoff: Knowledge (%)',
     'sentiment_avg': 'Avg Sentiment',
     'transfer_rate_percent': 'Transfer Rate (%)',
     'virtual_agent_quality_avg': 'VA Quality',
@@ -190,6 +209,102 @@ function friendlyMetricName(name: string): string {
 
   // Fallback: return as-is
   return name;
+}
+
+/**
+ * Convert underscored_lowercase to Title Case.
+ * Handles the " - " separator for combined topic-subtopic names.
+ * Accent-safe: only capitalizes after spaces/start, not after accented chars.
+ * e.g., "renda_fixa_-_resgate" → "Renda Fixa - Resgate"
+ * e.g., "previdência_privada_-_informações_gerais" → "Previdência Privada - Informações Gerais"
+ */
+function titleCase(str: string): string {
+  return str
+    .replace(/_/g, ' ')
+    .replace(/\s+-\s+/g, ' - ')
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+/**
+ * Compute period-level aggregate metrics across all days.
+ * Sums raw counters across dates, then derives rates/averages from the totals.
+ * These use date = "period" to distinguish from per-day metrics.
+ * Stat panels should use these for correct rates over a date range.
+ */
+function computePeriodMetrics(rawMetrics: MetricValue[]): MetricValue[] {
+  const derived: MetricValue[] = [];
+  const date = 'period';
+
+  // Sum all raw metrics across all days
+  const totals = new Map<string, number>();
+  for (const m of rawMetrics) {
+    totals.set(m.metricName, (totals.get(m.metricName) || 0) + m.value);
+  }
+
+  const get = (name: string) => totals.get(name);
+
+  // Helper to push a derived metric
+  const derive = (name: string, numerator: number | undefined, denominator: number | undefined) => {
+    if (numerator !== undefined && denominator !== undefined && denominator > 0) {
+      derived.push({ date, metricName: name, value: Math.round((numerator / denominator) * 100) / 100 });
+    }
+  };
+
+  const derivePercent = (name: string, numerator: number | undefined, denominator: number | undefined) => {
+    if (numerator !== undefined && denominator !== undefined && denominator > 0) {
+      derived.push({ date, metricName: name, value: Math.round((numerator / denominator) * 100 * 100) / 100 });
+    }
+  };
+
+  // Averages (sum / count)
+  derive('sentiment_avg', get('sentiment_score_sum'), get('sentiment_score_count'));
+  derive('summary_avg_words', get('summary_word_count_sum'), get('summary_word_count_count'));
+  derive('classification_avg_confidence', get('classification_confidence_sum'), get('classification_confidence_count'));
+  derive('pii_avg_entities_per_conversation', get('pii_entities_detected'), get('pii_conversations_with_entities'));
+  derive('intent_avg_confidence', get('intent_confidence_sum'), get('intent_confidence_count'));
+  derive('virtual_agent_quality_avg', get('virtual_agent_quality_sum'), get('virtual_agent_quality_count'));
+  derive('human_agent_quality_avg', get('human_agent_quality_sum'), get('human_agent_quality_count'));
+  derive('avg_handling_time_sec', get('handling_time_sum'), get('handling_time_count'));
+  derive('avg_response_time_sec', get('response_time_sum'), get('response_time_count'));
+  derive('avg_customer_wait_time_sec', get('customer_wait_time_sum'), get('customer_wait_time_count'));
+  derive('poc_csat_avg', get('poc_csat_sum'), get('poc_csat_count'));
+
+  // KPI averages
+  for (const kpi of ['kpi_precisao', 'kpi_cobertura_conhecimento', 'kpi_alucinacoes', 'kpi_compreensao', 'kpi_aderencia']) {
+    derive(`${kpi}_avg`, get(`${kpi}_sum`), get(`${kpi}_count`));
+  }
+
+  // Percentage metrics (count / total * 100)
+  const convCount = get('conversation_count');
+  derivePercent('transfer_rate_percent', get('human_agent_transfers'), convCount);
+  derivePercent('poc_ai_retention_rate_percent', get('poc_ai_retained_count'), get('poc_ai_retained_total'));
+  derivePercent('poc_error_rate_percent', get('poc_errors_count'), get('poc_ai_retained_total'));
+  derivePercent('poc_asked_for_human_rate_percent', get('poc_asked_for_human_count'), get('poc_ai_retained_total'));
+  derivePercent('poc_back_to_ivr_rate_percent', get('poc_back_to_ivr_count'), get('poc_ai_retained_total'));
+  derivePercent('kpi_desambiguador_rate_percent', get('kpi_desambiguador_count'), get('kpi_desambiguador_total'));
+
+  // Handoff reason rates (as % of all conversations)
+  for (const reason of ['customer_request', 'lack_of_comprehension', 'lack_of_knowledge']) {
+    derivePercent(`poc_handoff_${reason}_rate_percent`, get(`poc_handoff_${reason}`), convCount);
+  }
+
+  // VA/HA percent metrics
+  const vaMetrics = ['resolved_questions', 'resolved_without_human', 'avoided_hallucinations', 'avoided_repetitions', 'maintained_consistency'];
+  for (const m of vaMetrics) {
+    derivePercent(`virtual_agent_${m}_percent`, get(`virtual_agent_${m}`), convCount);
+  }
+  const transfers = get('human_agent_transfers');
+  const haMetrics = ['resolved_questions', 'was_cordial', 'avoided_repetitions', 'resolved_problem', 'clear_closing'];
+  for (const m of haMetrics) {
+    derivePercent(`human_agent_${m}_percent`, get(`human_agent_${m}`), transfers);
+  }
+
+  // Note: raw counters (conversation_count, poc_handoff_total, etc.) are NOT
+  // included in period metrics — Stat panels sum them across days natively.
+  // Only derived rates/averages need period-level computation.
+
+  return derived;
 }
 
 function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {
@@ -420,6 +535,19 @@ function computeDerivedMetrics(rawMetrics: MetricValue[]): MetricValue[] {
         metricName: 'poc_back_to_ivr_rate_percent',
         value: Math.round((pocBackToIvr / pocAiTotal) * 100 * 100) / 100,
       });
+    }
+
+    // Handoff reason rates (as % of all conversations)
+    const handoffReasons = ['customer_request', 'lack_of_comprehension', 'lack_of_knowledge'];
+    for (const reason of handoffReasons) {
+      const count = metrics.get(`poc_handoff_${reason}`);
+      if (count !== undefined && convCount !== undefined && convCount > 0) {
+        derived.push({
+          date,
+          metricName: `poc_handoff_${reason}_rate_percent`,
+          value: Math.round((count / convCount) * 100 * 100) / 100,
+        });
+      }
     }
 
     // General KPIs derived metrics (averages from sum/count)

@@ -126,7 +126,7 @@ describe('getMetrics', () => {
     expect(avg).toBeUndefined();
   });
 
-  it('groups derived metrics by date', async () => {
+  it('groups derived metrics by date and includes period aggregate', async () => {
     mockSend.mockResolvedValue({
       Items: [
         makeMetricItem('20260127', 'handling_time_sum', 200),
@@ -137,9 +137,12 @@ describe('getMetrics', () => {
     });
     const result = await getMetrics('test', {});
     const avgs = result.metrics.filter((m) => m.metricName === 'avg_handling_time_sec');
-    expect(avgs).toHaveLength(2);
+    // 2 per-day + 1 period aggregate
+    expect(avgs).toHaveLength(3);
     expect(avgs.find((m) => m.date === '2026-01-27T00:00:00Z')!.value).toBe(100);
     expect(avgs.find((m) => m.date === '2026-01-28T00:00:00Z')!.value).toBe(100);
+    // Period: (200+300) / (2+3) = 100
+    expect(avgs.find((m) => m.date === 'period')!.value).toBe(100);
   });
 
   it('returns correct period with default dates', async () => {

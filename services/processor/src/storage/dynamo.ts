@@ -397,10 +397,28 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
       await incrementMetric(tenantId, date, 'poc_ai_retained_total', 1);
     }
 
-    // Topic tracking
-    const topic = payload.topic as string;
-    if (topic && typeof topic === 'string') {
-      await incrementMetric(tenantId, date, `poc_topic_${topic.toLowerCase()}`, 1);
+    // Topic tracking (v2: topics array, v1 fallback: single topic field)
+    const topics = payload.topics as Array<Record<string, unknown>> | undefined;
+    const legacyTopic = payload.topic as string;
+
+    if (Array.isArray(topics)) {
+      for (const entry of topics) {
+        const primary = entry.primary_topic as string;
+        const sub = entry.subtopic as string;
+
+        if (primary && typeof primary === 'string') {
+          const normalizedPrimary = primary.toLowerCase().replace(/\s+/g, '_');
+          await incrementMetric(tenantId, date, `poc_topic_${normalizedPrimary}`, 1);
+
+          if (sub && typeof sub === 'string') {
+            const normalizedCombined = `${primary} - ${sub}`.toLowerCase().replace(/\s+/g, '_');
+            await incrementMetric(tenantId, date, `poc_subtopic_${normalizedCombined}`, 1);
+          }
+        }
+      }
+    } else if (legacyTopic && typeof legacyTopic === 'string') {
+      // v1 backward compatibility: single topic field
+      await incrementMetric(tenantId, date, `poc_topic_${legacyTopic.toLowerCase().replace(/\s+/g, '_')}`, 1);
     }
 
     // Back to IVR
@@ -409,10 +427,16 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
       await incrementMetric(tenantId, date, 'poc_back_to_ivr_count', 1);
     }
 
-    // Asked for human
-    const askedForHuman = payload.asked_for_human;
-    if (typeof askedForHuman === 'boolean' && askedForHuman) {
-      await incrementMetric(tenantId, date, 'poc_asked_for_human_count', 1);
+    // Asked for human (v1 boolean — DEPRECATED, replaced by handoff_reason enum)
+    // Kept in schema for backward compat but no longer aggregated.
+    // Historical data preserved in DynamoDB under poc_asked_for_human_count.
+
+    // Handoff reason (v2 enum)
+    const handoffReason = payload.handoff_reason as string;
+    if (handoffReason && typeof handoffReason === 'string' && handoffReason !== 'NONE') {
+      const normalizedReason = handoffReason.toLowerCase().replace(/\s+/g, '_');
+      await incrementMetric(tenantId, date, `poc_handoff_${normalizedReason}`, 1);
+      await incrementMetric(tenantId, date, 'poc_handoff_total', 1);
     }
 
     // Inferred CSAT (1-5 scale)

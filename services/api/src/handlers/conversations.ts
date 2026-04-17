@@ -9,6 +9,31 @@ const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.TABLE_NAME!;
 
+// Operator fields to surface in the conversations list view.
+// Loaded from OPERATOR_FIELDS_CONFIG env var (JSON string) if set,
+// otherwise uses default config. To customize, set the env var or
+// edit config/operator-fields.json and pass it via CDK.
+const operatorFieldsConfig: Record<string, string[]> = parseOperatorFieldsConfig();
+
+function parseOperatorFieldsConfig(): Record<string, string[]> {
+  const envConfig = process.env.OPERATOR_FIELDS_CONFIG;
+  if (envConfig) {
+    try {
+      const parsed = JSON.parse(envConfig);
+      const result: Record<string, string[]> = {};
+      for (const [name, conf] of Object.entries(parsed.operators || {})) {
+        result[name] = (conf as { fields: string[] }).fields;
+      }
+      return result;
+    } catch {
+      // Invalid JSON — fall through to default
+    }
+  }
+
+  // No config found — no operator fields will be enriched in list view
+  return {};
+}
+
 interface ListConversationsParams {
   from?: string;
   to?: string;
@@ -24,7 +49,7 @@ export async function listConversations(
   params: ListConversationsParams
 ): Promise<{ items: unknown[]; nextToken?: string }> {
   const { from, to, agentId, queueId, customerKey, limit = '50', nextToken } = params;
-  const pageLimit = Math.min(parseInt(limit, 10) || 50, 100);
+  const pageLimit = Math.min(parseInt(limit, 10) || 50, 500);
 
   let queryParams: QueryCommandInput;
 
@@ -81,7 +106,8 @@ export async function listConversations(
   // Add date range filter if provided
   if (from || to) {
     const fromTs = from ? formatTimestamp(new Date(from)) : '00000000000000';
-    const toTs = to ? formatTimestamp(new Date(to)) : '99999999999999';
+    // Set toTs to end of day (23:59:59) to include the full day
+    const toTs = to ? formatTimestamp(new Date(to)).slice(0, 8) + '235959' : '99999999999999';
 
     if (queryParams.KeyConditionExpression?.includes('GSI')) {
       // For GSIs, add SK condition
@@ -105,13 +131,13 @@ export async function listConversations(
 
   const result = await docClient.send(new QueryCommand(queryParams));
 
-  const items = (result.Items || []).map(item => {
+  const baseItems = (result.Items || []).map(item => {
     // Parse payload to access entity-specific fields (spine + payload pattern)
     const payload = item.payload ? JSON.parse(item.payload as string) : {};
 
     return {
-      conversationId: item.conversationId,
-      tenantId: item.tenantId,
+      conversationId: item.conversationId as string,
+      tenantId: item.tenantId as string,
       customerKey: payload.customerKey,
       channel: payload.channel,
       agentId: payload.agentId,
@@ -123,6 +149,12 @@ export async function listConversations(
       updatedAt: item.updatedAt,
     };
   });
+
+  // Enrich with operator fields if config is defined
+  const hasOperatorFields = Object.keys(operatorFieldsConfig).length > 0;
+  const items = hasOperatorFields
+    ? await enrichWithOperatorFields(tenantId, baseItems)
+    : baseItems;
 
   const response: { items: unknown[]; nextToken?: string } = { items };
 
@@ -208,4 +240,66 @@ export async function getConversation(
 
 function formatTimestamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, '').replace('T', '').split('.')[0];
+}
+
+/**
+ * Enrich conversation list items with operator result fields.
+ * For each conversation, queries its operator results and extracts
+ * the fields defined in operatorFieldsConfig.
+ *
+ * Uses Promise.all for parallel queries — safe at <500 conversations.
+ */
+async function enrichWithOperatorFields(
+  tenantId: string,
+  conversations: Array<Record<string, unknown>>
+): Promise<Array<Record<string, unknown>>> {
+  return Promise.all(
+    conversations.map(async (conv) => {
+      const conversationId = conv.conversationId as string;
+      if (!conversationId) return conv;
+
+      try {
+        // Query operator results for this conversation
+        const opResult = await docClient.send(
+          new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+            ExpressionAttributeValues: {
+              ':pk': `TENANT#${tenantId}#CONV#${conversationId}`,
+              ':skPrefix': 'OP#',
+            },
+          })
+        );
+
+        // Extract configured fields from matching operators
+        const operatorInsights: Record<string, unknown> = {};
+        for (const item of opResult.Items || []) {
+          const operatorName = item.operatorName as string;
+          const configuredFields = operatorFieldsConfig[operatorName];
+          if (!configuredFields) continue;
+
+          const payloadStr = item.payload as string;
+          if (!payloadStr) continue;
+
+          try {
+            const payload = JSON.parse(payloadStr);
+            const enriched = payload.enrichedPayload || {};
+
+            for (const field of configuredFields) {
+              if (enriched[field] !== undefined) {
+                operatorInsights[field] = enriched[field];
+              }
+            }
+          } catch {
+            // Invalid payload JSON — skip
+          }
+        }
+
+        return { ...conv, ...operatorInsights };
+      } catch {
+        // Query failed — return conversation without enrichment
+        return conv;
+      }
+    })
+  );
 }

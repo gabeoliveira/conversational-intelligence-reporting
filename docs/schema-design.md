@@ -81,17 +81,26 @@ See the [JSON Schema Compatibility](#json-schema-compatibility) section below fo
 
 ## AI Analytics Operator
 
-**Location:** `config/schemas/poc-analytics/v1.schema.json`
+**Location:** `config/schemas/poc-analytics/v2.schema.json` (v1 deprecated)
 
-This operator analyzes AI virtual agent performance, conversation topics, and inferred satisfaction. Designed for `GenerativeJSON` operator type.
+This operator analyzes AI virtual agent performance, conversation topics, handoff reasons, and inferred satisfaction. Designed for `GenerativeJSON` operator type.
 
 **Fields:**
 - `ai_retained` (boolean) — Whether the AI resolved without human transfer
-- `topic` (string) — Conversation topic in one word (Portuguese)
+- `topics` (array of objects) — Conversations can cover multiple topics. Each entry:
+  - `primary_topic` (string, enum: 26 categories) — Main topic category
+  - `subtopic` (string, enum: 273 deduped values) — Specific reason within the topic
+  - `key_moment` (string) — Verbatim transcript sentence that triggered this classification
 - `back_to_ivr` (boolean) — Customer returned to IVR
-- `asked_for_human` (boolean) — Customer asked for a human agent
+- `handoff_reason` (string, enum: `NONE`, `CUSTOMER_REQUEST`, `LACK_OF_COMPREHENSION`, `LACK_OF_KNOWLEDGE`) — Why a handoff occurred. Tracks AI acceptance, AI quality, and knowledge base quality respectively.
 - `inferred_csat` (integer) — Inferred satisfaction 1-5
+- `csat_reasoning` (string) — Explanation of why this CSAT score was inferred
 - `errors` (boolean) — AI made mistakes (hallucinations, misconceptions)
+
+**Aggregation:**
+- Topics produce both `poc_topic_{primary}` (high-level pie chart) and `poc_subtopic_{primary_-_subtopic}` (detailed bar chart) metrics
+- Handoff reasons produce `poc_handoff_{reason}` counters and `poc_handoff_{reason}_rate_percent` derived metrics (as % of all conversations)
+- Multiple topics per conversation are each counted independently
 
 **Metrics tracked:** See [bi-integration.md](./bi-integration.md#ai-analytics-metrics-from-analytics-operator) for the full catalog.
 

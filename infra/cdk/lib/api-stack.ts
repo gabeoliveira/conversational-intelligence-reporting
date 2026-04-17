@@ -10,6 +10,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export interface ApiStackProps extends cdk.StackProps {
   envName: string;
@@ -31,6 +32,15 @@ export class ApiStack extends cdk.Stack {
 
     const servicesRoot = path.join(__dirname, '..', '..', '..', 'services');
 
+    // Load operator fields config from file (passed to API Lambda as env var)
+    const configRoot = path.join(__dirname, '..', '..', '..', 'config');
+    let operatorFieldsConfig = '';
+    try {
+      operatorFieldsConfig = fs.readFileSync(path.join(configRoot, 'operator-fields.json'), 'utf-8');
+    } catch {
+      // Config file not found — Lambda will use its built-in default
+    }
+
     // Common Lambda environment variables
     const commonEnv = {
       CIRL_ENV: envName,
@@ -40,6 +50,8 @@ export class ApiStack extends cdk.Stack {
       NODE_OPTIONS: '--enable-source-maps',
       // Default tenant ID for single-tenant deployments
       ...(process.env.CIRL_TENANT_ID && { CIRL_TENANT_ID: process.env.CIRL_TENANT_ID }),
+      // Operator fields config for conversations list enrichment
+      ...(operatorFieldsConfig && { OPERATOR_FIELDS_CONFIG: operatorFieldsConfig }),
     };
 
     // Log groups for Lambdas

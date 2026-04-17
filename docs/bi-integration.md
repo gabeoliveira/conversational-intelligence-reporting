@@ -288,10 +288,22 @@ Available when `CIRL_ANALYTICS=lakehouse`. All tables have clean, flat schemas.
 | `poc_ai_retention_rate_percent` | Computed | % resolved by AI without human |
 | `poc_csat_avg` | Computed | Average inferred CSAT (1-5) |
 | `poc_csat_{1-5}` | Counter | CSAT score distribution |
-| `poc_topic_{name}` | Counter | Count per conversation topic |
+| `poc_topic_{name}` | Counter | Count per primary topic |
+| `poc_subtopic_{primary_-_subtopic}` | Counter | Count per topic-subtopic combination |
 | `poc_error_rate_percent` | Computed | % with AI errors |
-| `poc_asked_for_human_rate_percent` | Computed | % where customer asked for human |
 | `poc_back_to_ivr_rate_percent` | Computed | % where customer returned to IVR |
+
+### Handoff Reason Metrics
+
+| Metric Name | Type | Description |
+|-------------|------|-------------|
+| `poc_handoff_customer_request` | Counter | Conversations where customer requested human |
+| `poc_handoff_lack_of_comprehension` | Counter | Conversations where AI failed to understand |
+| `poc_handoff_lack_of_knowledge` | Counter | Conversations where AI lacked knowledge |
+| `poc_handoff_total` | Counter | Total conversations with any handoff |
+| `poc_handoff_customer_request_rate_percent` | Computed | % of all conversations (tracks AI acceptance) |
+| `poc_handoff_lack_of_comprehension_rate_percent` | Computed | % of all conversations (tracks AI quality) |
+| `poc_handoff_lack_of_knowledge_rate_percent` | Computed | % of all conversations (tracks knowledge base quality) |
 
 ### PII & Summary Metrics
 
@@ -300,6 +312,41 @@ Available when `CIRL_ANALYTICS=lakehouse`. All tables have clean, flat schemas.
 | `pii_entities_detected` | Counter | Total PII entities found |
 | `pii_avg_entities_per_conversation` | Computed | Average PII per conversation |
 | `summary_avg_words` | Computed | Average summary length |
+
+---
+
+## Period-Level Metrics
+
+The metrics API returns two types of derived metrics:
+
+- **Per-day**: One data point per date (e.g., `avg_handling_time_sec` for `2026-04-16`). Used for time series charts.
+- **Period**: A single data point with `date = "period"` that sums numerators and denominators across all days in the requested range, then computes the derived value. Used for stat panels.
+
+This ensures that stat panels showing a rate (like `poc_handoff_lack_of_comprehension_rate_percent`) compute the correct aggregate — `total comprehension handoffs / total conversations` — rather than averaging daily rates, which would be mathematically incorrect.
+
+Stat panels should use **Calculation: Last (not null)** to pick up the period value. Time series panels automatically use the per-day values.
+
+---
+
+## Conversation List Enrichment
+
+The conversations list endpoint (`GET /tenants/{id}/conversations`) can include operator result fields alongside conversation metadata. This enables drill-down in BI tools — for example, filtering conversations by `handoff_reason` without a separate query.
+
+**Configuration:** Edit `config/operator-fields.json` to define which fields to surface:
+
+```json
+{
+  "operators": {
+    "Analytics": {
+      "fields": ["handoff_reason"]
+    }
+  }
+}
+```
+
+The config is read by CDK at deploy time and passed to the API Lambda. Each conversation in the list response will include the specified fields extracted from its operator results.
+
+**Performance note:** This makes one additional DynamoDB query per conversation in the list. Safe up to ~500 conversations per request. For larger datasets, consider the indexed approach described in the Roadmap.
 
 ---
 
