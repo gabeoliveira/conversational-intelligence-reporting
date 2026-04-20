@@ -557,11 +557,12 @@ If BI reporting is your only use case and you don't need the REST API:
 
 ### Config-Driven Operator Metrics (In Progress)
 
-The config schema and loader are implemented (`config/operator-metrics.json`, `packages/shared/src/operator-config.ts`, `packages/shared/src/config-loader.ts`). Remaining work:
+The config schema, loader, S3 storage, and aggregation engine are implemented. Operators with a config entry in `config/operator-metrics.json` are automatically processed by the generic engine. Operators without a config fall back to hardcoded blocks. Remaining work:
 
-- **Aggregation engine** — generic processor that replaces hardcoded `if (operatorName === '...')` blocks
-- **API auto-derived metrics** — auto-generates dependency maps and display names from config
-- **Migration** — verify parity with hardcoded output, then remove hardcoded blocks
+- **API auto-derived metrics** — auto-generates dependency maps and display names from config (currently hardcoded)
+- **API auto-display names** — generates `displayName` from config instead of hardcoded map
+- **Migration** — remove hardcoded aggregation blocks once API is config-driven
+- **Migrate `operator-fields.json`** — replace with `surfaceInList` flag in operator-metrics config
 
 See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full implementation plan.
 
@@ -645,7 +646,7 @@ This is not included as a template option because the cost savings are minimal f
 
 ## Testing
 
-CIRL includes 78 unit tests covering the ingestion, processing, API, and shared config layers.
+CIRL includes 101 unit tests covering the ingestion, processing, API, and shared config layers.
 
 ```bash
 # Run all tests
@@ -666,6 +667,7 @@ Test coverage includes:
 - Twilio webhook signature validation
 - Ingest handler (Twilio CI and legacy webhook paths)
 - Processor pipeline (schema validation, enrichment, aggregation, error handling)
+- Config-driven aggregation engine (all 5 primitive types, min/max, distribution, ignored values)
 - API metrics (derived metrics, period-level aggregates, display names, date filtering)
 - API routing, CORS, and conversation enrichment
 - Config loader (parsing, caching, operator lookup, surface fields, config file validation)

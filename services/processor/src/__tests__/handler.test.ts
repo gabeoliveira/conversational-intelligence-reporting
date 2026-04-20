@@ -21,6 +21,16 @@ jest.mock('../storage/dynamo', () => ({
   writeOperatorResult: mockWriteOperatorResult,
   updateAggregates: mockUpdateAggregates,
   updateTimingAggregates: mockUpdateTimingAggregates,
+  formatDate: jest.fn().mockReturnValue('20260127'),
+}));
+
+const mockAggregateFromConfig = jest.fn().mockResolvedValue(false);
+jest.mock('../storage/aggregation-engine', () => ({
+  aggregateFromConfig: mockAggregateFromConfig,
+}));
+
+jest.mock('@cirl/shared', () => ({
+  ensureConfigLoaded: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../schema/validate', () => ({
@@ -155,5 +165,41 @@ describe('processor handler', () => {
     mockWriteConversation.mockRejectedValueOnce(new Error('DynamoDB throttle'));
 
     await expect(handler(makeEvent())).rejects.toThrow('DynamoDB throttle');
+  });
+
+  it('uses config-driven aggregation when config exists', async () => {
+    mockAggregateFromConfig.mockResolvedValueOnce(true);
+
+    await handler(makeEvent());
+
+    // Config-driven engine was called
+    expect(mockAggregateFromConfig).toHaveBeenCalledWith(
+      'test-tenant',
+      '20260127',
+      'test-operator',
+      expect.any(Object)
+    );
+
+    // updateAggregates still called (for generic counts) but with empty payload
+    expect(mockUpdateAggregates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: {},
+      })
+    );
+  });
+
+  it('falls back to hardcoded aggregation when no config', async () => {
+    mockAggregateFromConfig.mockResolvedValueOnce(false);
+
+    await handler(makeEvent());
+
+    // updateAggregates called with full payload (hardcoded path)
+    expect(mockUpdateAggregates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          _operator_type: 'json',
+        }),
+      })
+    );
   });
 });

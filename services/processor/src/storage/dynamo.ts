@@ -36,7 +36,7 @@ function formatTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/[-:]/g, '').replace('T', '').split('.')[0];
 }
 
-function formatDate(date: Date = new Date()): string {
+export function formatDate(date: Date = new Date()): string {
   return date.toISOString().split('T')[0].replace(/-/g, '');
 }
 
@@ -547,7 +547,7 @@ export async function updateTimingAggregates(params: UpdateTimingAggregatesParam
   }
 }
 
-async function incrementMetric(
+export async function incrementMetric(
   tenantId: string,
   date: string,
   metricName: string,

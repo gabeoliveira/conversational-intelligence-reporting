@@ -1,8 +1,10 @@
 import type { EventBridgeEvent } from 'aws-lambda';
 import { getPayloadFromS3 } from './storage/s3';
-import { writeConversation, writeOperatorResult, updateAggregates, updateTimingAggregates } from './storage/dynamo';
+import { writeConversation, writeOperatorResult, updateAggregates, updateTimingAggregates, formatDate } from './storage/dynamo';
+import { aggregateFromConfig } from './storage/aggregation-engine';
 import { enrich } from './enrich/enrich';
 import { validatePayload } from './schema/validate';
+import { ensureConfigLoaded } from '@cirl/shared';
 import type { PayloadReceivedEvent, CIWebhookPayload } from './types';
 
 export async function handler(
@@ -20,6 +22,9 @@ export async function handler(
   } = detail;
 
   console.log(`Processing: tenant=${tenantId}, conversation=${conversationId}, operator=${operatorName}`);
+
+  // Load operator metrics config from S3 (cached after first cold start)
+  await ensureConfigLoaded();
 
   try {
     // 1. Fetch raw payload from S3
@@ -85,13 +90,31 @@ export async function handler(
     });
 
     // 8. Update aggregates (operator metrics + timing metrics if available)
-    await updateAggregates({
-      tenantId,
-      conversationId,
-      operatorName,
-      payload: enrichedPayload,
-      receivedAt,
-    });
+    // Try config-driven aggregation first; fall back to hardcoded blocks
+    const configDate = formatDate(new Date(receivedAt));
+    const handledByConfig = await aggregateFromConfig(tenantId, configDate, operatorName, enrichedPayload);
+
+    if (!handledByConfig) {
+      // No config for this operator — use hardcoded aggregation (legacy)
+      await updateAggregates({
+        tenantId,
+        conversationId,
+        operatorName,
+        payload: enrichedPayload,
+        receivedAt,
+      });
+    } else {
+      // Config handled operator-specific metrics, but we still need:
+      // - operator count (generic, always tracked)
+      // - conversation count dedup (generic, always tracked)
+      await updateAggregates({
+        tenantId,
+        conversationId,
+        operatorName,
+        payload: {}, // Empty payload — skips all operator-specific blocks
+        receivedAt,
+      });
+    }
 
     // 9. Update timing metrics (from transcript sentences, if present)
     const timingMetrics = (metadata as Record<string, unknown>)?.timingMetrics as

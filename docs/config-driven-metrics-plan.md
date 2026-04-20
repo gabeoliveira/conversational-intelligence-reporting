@@ -110,17 +110,17 @@ Optional modifiers:
 
 ### 3. Implementation Pieces
 
-| # | Piece | What it does | Depends on | Effort |
+| # | Piece | What it does | Depends on | Status |
 |---|---|---|---|---|
-| 1 | **Config schema** | TypeScript interfaces for the config shape | Nothing | Small |
-| 2 | **Config storage** | Where configs live + loading mechanism | #1 | Small-Medium |
-| 3 | **Aggregation engine** | Generic processor that reads config and writes metrics by primitive type | #1, #2 | Medium |
-| 4 | **API derived metrics** | Auto-generates dependency map + computes derived values from config | #1, #2 | Medium |
-| 5 | **API display names** | Returns `displayName` from config instead of hardcoded map | #1, #2 | Small |
-| 6 | **Conversation enrichment** | Reads `surfaceInList` from config for list view fields | #1, #2 | Small |
-| 7 | **Config management API** | CRUD endpoints for managing configs (optional for MVP) | #1, #2 | Medium |
+| 1 | **Config schema** | TypeScript interfaces for the config shape | Nothing | **Done** |
+| 2 | **Config storage** | S3-based loading with in-memory cache | #1 | **Done** |
+| 3 | **Aggregation engine** | Generic processor that reads config and writes metrics by primitive type | #1, #2 | **Done** |
+| 4 | **API derived metrics** | Auto-generates dependency map + computes derived values from config | #1, #2 | Pending |
+| 5 | **API display names** | Returns `displayName` from config instead of hardcoded map | #1, #2 | Pending |
+| 6 | **Conversation enrichment** | Reads `surfaceInList` from config for list view fields | #1, #2 | Pending |
+| 7 | **Config management API** | CRUD endpoints for managing configs (optional for MVP) | #1, #2 | Deferred |
 
-Items 1-6 are essential. Item 7 is optional for MVP — configs can be managed via file + redeploy.
+Items 1-3 are complete. Items 4-6 are next (Phase 3). Item 7 is deferred — configs are managed via file + redeploy.
 
 ### 4. Storage Decision
 
@@ -312,10 +312,12 @@ The config-driven system coexists with hardcoded blocks during migration:
 1. ~~Build config schema and loader~~ — **Done** (`packages/shared/src/operator-config.ts`, `config-loader.ts`, `s3-config.ts`)
 2. ~~Create configs for existing operators~~ — **Done** (`config/operator-metrics.json` with Analytics + General KPIs)
 3. ~~Deploy config to S3~~ — **Done** (CDK `BucketDeployment` to `s3://{bucket}/config/`)
-4. Build the generic aggregation engine alongside existing hardcoded blocks
-5. Verify metrics match between hardcoded and config-driven output
-6. Remove hardcoded blocks
-7. Migrate `operator-fields.json` into `operator-metrics.json` (`surfaceInList` flag)
+4. ~~Build the generic aggregation engine~~ — **Done** (`services/processor/src/storage/aggregation-engine.ts`)
+5. ~~Wire into processor handler with fallback to hardcoded~~ — **Done** (config-driven first, hardcoded fallback)
+6. ~~Verify parity between config-driven and hardcoded output~~ — **Done** (deployed to dev, verified metrics match)
+7. Build API auto-derived metrics and auto-display names from config
+8. Remove hardcoded aggregation blocks
+9. Migrate `operator-fields.json` into `operator-metrics.json` (`surfaceInList` flag)
 
 ### 8. What This Unlocks
 
