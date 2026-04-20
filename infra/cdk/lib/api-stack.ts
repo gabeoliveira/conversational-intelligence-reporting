@@ -8,6 +8,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -32,26 +33,35 @@ export class ApiStack extends cdk.Stack {
 
     const servicesRoot = path.join(__dirname, '..', '..', '..', 'services');
 
-    // Load operator fields config from file (passed to API Lambda as env var)
+    // Deploy operator config files to S3 for Lambda runtime access
     const configRoot = path.join(__dirname, '..', '..', '..', 'config');
-    let operatorFieldsConfig = '';
-    try {
-      operatorFieldsConfig = fs.readFileSync(path.join(configRoot, 'operator-fields.json'), 'utf-8');
-    } catch {
-      // Config file not found — Lambda will use its built-in default
-    }
+    const configDeployment = new s3deploy.BucketDeployment(this, 'OperatorConfigs', {
+      sources: [
+        s3deploy.Source.asset(configRoot, {
+          exclude: ['schemas/**', 'demo-data/**'],
+        }),
+      ],
+      destinationBucket: rawBucket,
+      destinationKeyPrefix: 'config/',
+      retainOnDelete: false,
+    });
 
     // Common Lambda environment variables
+    // Config S3 paths (Lambdas read these at cold start)
+    const configBucket = rawBucket.bucketName;
+    const configPrefix = 'config/';
+
     const commonEnv = {
       CIRL_ENV: envName,
       TABLE_NAME: table.tableName,
-      RAW_BUCKET_NAME: rawBucket.bucketName,
+      RAW_BUCKET_NAME: configBucket,
       EVENT_BUS_NAME: eventBus.eventBusName,
       NODE_OPTIONS: '--enable-source-maps',
+      // Config location in S3
+      CONFIG_BUCKET: configBucket,
+      CONFIG_PREFIX: configPrefix,
       // Default tenant ID for single-tenant deployments
       ...(process.env.CIRL_TENANT_ID && { CIRL_TENANT_ID: process.env.CIRL_TENANT_ID }),
-      // Operator fields config for conversations list enrichment
-      ...(operatorFieldsConfig && { OPERATOR_FIELDS_CONFIG: operatorFieldsConfig }),
     };
 
     // Log groups for Lambdas
@@ -97,7 +107,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `cirl-${envName}-ingest`,
       entry: path.join(servicesRoot, 'ingest', 'src', 'handler.ts'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
       timeout: cdk.Duration.seconds(30),
@@ -114,7 +124,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `cirl-${envName}-processor`,
       entry: path.join(servicesRoot, 'processor', 'src', 'handler.ts'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.minutes(1),
@@ -144,7 +154,7 @@ export class ApiStack extends cdk.Stack {
       functionName: `cirl-${envName}-dashboard`,
       entry: path.join(servicesRoot, 'api', 'src', 'handler.ts'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),

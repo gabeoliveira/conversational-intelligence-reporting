@@ -89,7 +89,7 @@ You can start with `none` and upgrade to `simple` or `lakehouse` later without l
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - AWS CLI configured with credentials
 - AWS CDK CLI (`npm install -g aws-cdk`)
 - Twilio Account SID and Auth Token
@@ -427,13 +427,45 @@ Add JSON schemas to `config/schemas/{operator-name}/v{version}.schema.json` for 
 
 See [docs/schema-design.md](docs/schema-design.md) for details on consolidated vs. separate operator schemas.
 
+### Configure Operator Metrics
+
+Define how operator result fields are aggregated into metrics by editing `config/operator-metrics.json`. Each operator has a list of metric definitions using primitive types:
+
+```json
+{
+  "operatorName": "Analytics",
+  "displayName": "Analise da IA",
+  "metrics": [
+    { "field": "ai_retained", "type": "boolean", "metricPrefix": "poc_ai_retained", "displayName": "Retencao da IA" },
+    { "field": "inferred_csat", "type": "integer", "metricPrefix": "poc_csat", "displayName": "CSAT", "min": 1, "max": 5, "distribution": true },
+    { "field": "handoff_reason", "type": "enum", "metricPrefix": "poc_handoff", "displayName": "Transbordo", "values": ["NONE", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"] }
+  ]
+}
+```
+
+Supported primitive types:
+
+| Type | Stores | Derives | Use case |
+|---|---|---|---|
+| `boolean` | `{prefix}_count`, `{prefix}_total` | `{prefix}_rate_percent` | Yes/no flags (retained, errors) |
+| `integer` | `{prefix}_sum`, `{prefix}_count` | `{prefix}_avg` | Scores (CSAT, quality) |
+| `category` | `{prefix}_{value}` | — | Free-text topics |
+| `enum` | `{prefix}_{value}`, `{prefix}_total` | `{prefix}_{value}_rate_percent` | Fixed-set classifications (handoff reasons) |
+| `category_array` | `{prefix}_{category}`, `{subcategoryPrefix}_{combined}` | — | Multi-topic conversations |
+
+Additional options: `distribution` (track per-value buckets), `ignoreValues` (skip specific enum values), `min`/`max` (sanity checks), `surfaceInList` (include in conversations list enrichment).
+
+See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design.
+
 ---
 
 ## Project Structure
 
 ```
 ├── config/
-│   └── schemas/            # Operator JSON schemas
+│   ├── schemas/            # Operator JSON schemas (Twilio validation)
+│   ├── operator-metrics.json  # Metric aggregation config — deployed to S3
+│   └── operator-fields.json   # Conversation list enrichment — deployed to S3
 ├── dashboards/            # BI dashboard templates (Grafana, QuickSight, Tableau, etc.)
 ├── docs/                  # Documentation
 │   ├── LAKEHOUSE-ARCHITECTURE.md  # Lakehouse design (Bronze/Silver/Gold)
@@ -523,29 +555,15 @@ If BI reporting is your only use case and you don't need the REST API:
 
 ## Roadmap
 
-### Config-Driven Operator Metrics (Planned)
+### Config-Driven Operator Metrics (In Progress)
 
-Currently, adding metrics for a new operator requires writing custom aggregation code in `dynamo.ts` and derived metric computation in `metrics.ts`. The planned improvement is a config-driven approach where you define metric primitives per operator field:
+The config schema and loader are implemented (`config/operator-metrics.json`, `packages/shared/src/operator-config.ts`, `packages/shared/src/config-loader.ts`). Remaining work:
 
-```json
-{
-  "operatorSid": "LY...",
-  "name": "my-operator",
-  "metrics": [
-    { "field": "ai_retained", "type": "boolean", "metric": "ai_retained" },
-    { "field": "topic", "type": "category", "metric": "topic" },
-    { "field": "csat_score", "type": "integer", "metric": "csat", "min": 1, "max": 5 }
-  ]
-}
-```
+- **Aggregation engine** — generic processor that replaces hardcoded `if (operatorName === '...')` blocks
+- **API auto-derived metrics** — auto-generates dependency maps and display names from config
+- **Migration** — verify parity with hardcoded output, then remove hardcoded blocks
 
-Four primitives handle all common cases:
-- **boolean** → tracks `{metric}_count` (true), `{metric}_total`, derives `{metric}_rate_percent`
-- **integer/number** → tracks `{metric}_sum`, `{metric}_count`, derives `{metric}_avg`
-- **category** → tracks `{metric}_{value}` per distinct value
-- **enum** → same as category with validation against allowed values
-
-This eliminates custom code per operator and makes the template fully self-service.
+See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full implementation plan.
 
 ### API Gateway Authentication (Planned)
 
@@ -627,16 +645,17 @@ This is not included as a template option because the cost savings are minimal f
 
 ## Testing
 
-CIRL includes 59 unit tests covering the ingestion, processing, and API layers.
+CIRL includes 78 unit tests covering the ingestion, processing, API, and shared config layers.
 
 ```bash
 # Run all tests
 npm test
 
-# Run tests for a specific service
+# Run tests for a specific service/package
 npx jest services/ingest
 npx jest services/processor
 npx jest services/api
+npx jest packages/shared
 
 # Run in watch mode during development
 npx jest --watch
@@ -647,8 +666,9 @@ Test coverage includes:
 - Twilio webhook signature validation
 - Ingest handler (Twilio CI and legacy webhook paths)
 - Processor pipeline (schema validation, enrichment, aggregation, error handling)
-- API metrics (derived metrics computation, date filtering)
-- API routing and CORS
+- API metrics (derived metrics, period-level aggregates, display names, date filtering)
+- API routing, CORS, and conversation enrichment
+- Config loader (parsing, caching, operator lookup, surface fields, config file validation)
 
 See [docs/POC-SETUP.md](docs/POC-SETUP.md#running-tests) for the complete test suite breakdown.
 

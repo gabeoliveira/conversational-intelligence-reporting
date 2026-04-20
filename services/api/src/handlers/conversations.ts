@@ -4,34 +4,61 @@ import {
   QueryCommand,
   QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
+const s3Client = new S3Client({});
 const TABLE_NAME = process.env.TABLE_NAME!;
 
-// Operator fields to surface in the conversations list view.
-// Loaded from OPERATOR_FIELDS_CONFIG env var (JSON string) if set,
-// otherwise uses default config. To customize, set the env var or
-// edit config/operator-fields.json and pass it via CDK.
-const operatorFieldsConfig: Record<string, string[]> = parseOperatorFieldsConfig();
+// Operator fields config — loaded from S3 on first use, cached in memory
+let operatorFieldsConfig: Record<string, string[]> | null = null;
 
-function parseOperatorFieldsConfig(): Record<string, string[]> {
+async function getOperatorFieldsConfig(): Promise<Record<string, string[]>> {
+  if (operatorFieldsConfig !== null) return operatorFieldsConfig;
+
+  // Try S3 first
+  const bucket = process.env.CONFIG_BUCKET;
+  const prefix = process.env.CONFIG_PREFIX || 'config/';
+  if (bucket) {
+    try {
+      const response = await s3Client.send(new GetObjectCommand({
+        Bucket: bucket,
+        Key: `${prefix}operator-fields.json`,
+      }));
+      const body = await response.Body?.transformToString();
+      if (body) {
+        const parsed = JSON.parse(body);
+        operatorFieldsConfig = {};
+        for (const [name, conf] of Object.entries(parsed.operators || {})) {
+          operatorFieldsConfig[name] = (conf as { fields: string[] }).fields;
+        }
+        return operatorFieldsConfig;
+      }
+    } catch (error: any) {
+      if (error.name !== 'NoSuchKey') {
+        console.error('Failed to load operator-fields.json from S3:', error);
+      }
+    }
+  }
+
+  // Fallback: env var (backward compatibility)
   const envConfig = process.env.OPERATOR_FIELDS_CONFIG;
   if (envConfig) {
     try {
       const parsed = JSON.parse(envConfig);
-      const result: Record<string, string[]> = {};
+      operatorFieldsConfig = {};
       for (const [name, conf] of Object.entries(parsed.operators || {})) {
-        result[name] = (conf as { fields: string[] }).fields;
+        operatorFieldsConfig[name] = (conf as { fields: string[] }).fields;
       }
-      return result;
+      return operatorFieldsConfig;
     } catch {
-      // Invalid JSON — fall through to default
+      // Invalid JSON
     }
   }
 
-  // No config found — no operator fields will be enriched in list view
-  return {};
+  operatorFieldsConfig = {};
+  return operatorFieldsConfig;
 }
 
 interface ListConversationsParams {
@@ -151,9 +178,10 @@ export async function listConversations(
   });
 
   // Enrich with operator fields if config is defined
-  const hasOperatorFields = Object.keys(operatorFieldsConfig).length > 0;
+  const fieldsConfig = await getOperatorFieldsConfig();
+  const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
   const items = hasOperatorFields
-    ? await enrichWithOperatorFields(tenantId, baseItems)
+    ? await enrichWithOperatorFields(tenantId, baseItems, fieldsConfig)
     : baseItems;
 
   const response: { items: unknown[]; nextToken?: string } = { items };
@@ -251,7 +279,8 @@ function formatTimestamp(date: Date): string {
  */
 async function enrichWithOperatorFields(
   tenantId: string,
-  conversations: Array<Record<string, unknown>>
+  conversations: Array<Record<string, unknown>>,
+  fieldsConfig: Record<string, string[]>
 ): Promise<Array<Record<string, unknown>>> {
   return Promise.all(
     conversations.map(async (conv) => {
@@ -275,7 +304,7 @@ async function enrichWithOperatorFields(
         const operatorInsights: Record<string, unknown> = {};
         for (const item of opResult.Items || []) {
           const operatorName = item.operatorName as string;
-          const configuredFields = operatorFieldsConfig[operatorName];
+          const configuredFields = fieldsConfig[operatorName];
           if (!configuredFields) continue;
 
           const payloadStr = item.payload as string;

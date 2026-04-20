@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "description": "Operator metric configurations for CIRL. Defines how operator result fields are aggregated into metrics.",
+  "operators": [
+    {
+      "operatorName": "Analytics",
+      "displayName": "Analise da IA",
+      "metrics": [
+        {
+          "field": "ai_retained",
+          "type": "boolean",
+          "metricPrefix": "poc_ai_retained",
+          "displayName": "Retencao da IA",
+          "surfaceInList": false
+        },
+        {
+          "field": "handoff_reason",
+          "type": "enum",
+          "metricPrefix": "poc_handoff",
+          "displayName": "Transbordo",
+          "values": ["NONE", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"],
+          "valueDisplayNames": {
+            "CUSTOMER_REQUEST": "Solicitacao do Cliente",
+            "LACK_OF_COMPREHENSION": "Falta de Compreensao",
+            "LACK_OF_KNOWLEDGE": "Falta de Conhecimento"
+          },
+          "ignoreValues": ["NONE"],
+          "rateDenominator": "conversation_count",
+          "surfaceInList": true
+        },
+        {
+          "field": "topics",
+          "type": "category_array",
+          "metricPrefix": "poc_topic",
+          "displayName": "Topico",
+          "categoryField": "primary_topic",
+          "subcategoryField": "subtopic",
+          "subcategoryPrefix": "poc_subtopic",
+          "surfaceInList": false
+        },
+        {
+          "field": "back_to_ivr",
+          "type": "boolean",
+          "metricPrefix": "poc_back_to_ivr",
+          "displayName": "Retorno a URA",
+          "surfaceInList": false
+        },
+        {
+          "field": "inferred_csat",
+          "type": "integer",
+          "metricPrefix": "poc_csat",
+          "displayName": "CSAT",
+          "min": 1,
+          "max": 5,
+          "distribution": true,
+          "surfaceInList": true
+        },
+        {
+          "field": "errors",
+          "type": "boolean",
+          "metricPrefix": "poc_errors",
+          "displayName": "Erros da IA",
+          "surfaceInList": false
+        }
+      ]
+    },
+    {
+      "operatorName": "MVP - Inter - General KPIs",
+      "displayName": "KPIs Gerais",
+      "metrics": [
+        {
+          "field": "precisao",
+          "type": "integer",
+          "metricPrefix": "kpi_precisao",
+          "displayName": "Precisao",
+          "surfaceInList": false
+        },
+        {
+          "field": "cobertura_conhecimento",
+          "type": "integer",
+          "metricPrefix": "kpi_cobertura_conhecimento",
+          "displayName": "Cobertura de Conhecimento",
+          "surfaceInList": false
+        },
+        {
+          "field": "alucinacoes",
+          "type": "integer",
+          "metricPrefix": "kpi_alucinacoes",
+          "displayName": "Alucinacoes",
+          "surfaceInList": false
+        },
+        {
+          "field": "compreensao",
+          "type": "integer",
+          "metricPrefix": "kpi_compreensao",
+          "displayName": "Compreensao",
+          "surfaceInList": false
+        },
+        {
+          "field": "aderencia",
+          "type": "integer",
+          "metricPrefix": "kpi_aderencia",
+          "displayName": "Aderencia",
+          "surfaceInList": false
+        },
+        {
+          "field": "desambiguador",
+          "type": "boolean",
+          "metricPrefix": "kpi_desambiguador",
+          "displayName": "Taxa de Desambiguacao",
+          "surfaceInList": false
+        }
+      ]
+    }
+  ]
+}

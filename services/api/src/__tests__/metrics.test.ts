@@ -43,7 +43,7 @@ describe('getMetrics', () => {
     expect(result.metrics[0]).toEqual({
       date: '2026-01-27T00:00:00Z',
       metricName: 'conversation_count',
-      displayName: 'Conversations',
+      displayName: 'Conversas',
       value: 42,
     });
   });
@@ -59,7 +59,7 @@ describe('getMetrics', () => {
     const avg = result.metrics.find((m) => m.metricName === 'sentiment_avg');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(75);
-    expect((avg as any).displayName).toBe('Avg Sentiment');
+    expect((avg as any).displayName).toBe('Sentimento Médio');
   });
 
   it('computes avg_handling_time_sec from sum/count', async () => {

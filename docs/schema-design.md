@@ -190,44 +190,35 @@ The system automatically tracks these metrics:
 
 ### Adding Custom Metrics
 
-To track additional metrics from your consolidated operator, edit:
+Add an entry to `config/operator-metrics.json` for your operator. No TypeScript code needed:
 
-**1. Update Aggregation Logic** (`services/processor/src/storage/dynamo.ts`):
-
-```typescript
-if (operatorName === 'conversation-intelligence') {
-  const summary = payload.summary as Record<string, unknown>;
-  if (summary) {
-    // Example: Track follow-up rate
-    const followUpRequired = summary.follow_up_required as boolean;
-    if (followUpRequired) {
-      await incrementMetric(tenantId, date, 'conversations_requiring_followup', 1);
+```json
+{
+  "operatorName": "my-operator",
+  "displayName": "My Operator",
+  "metrics": [
+    {
+      "field": "follow_up_required",
+      "type": "boolean",
+      "metricPrefix": "followup",
+      "displayName": "Follow-up Required"
+    },
+    {
+      "field": "action_item_count",
+      "type": "integer",
+      "metricPrefix": "action_items",
+      "displayName": "Action Items"
     }
-
-    // Example: Track action item counts
-    const actionItems = summary.action_items as unknown[];
-    if (Array.isArray(actionItems)) {
-      await incrementMetric(tenantId, date, 'action_items_total', actionItems.length);
-      await incrementMetric(tenantId, date, 'action_items_count', 1); // For averaging
-    }
-  }
+  ]
 }
 ```
 
-**2. Compute Derived Metrics** (`services/api/src/handlers/metrics.ts`):
+The aggregation engine automatically:
+- Tracks `followup_count` / `followup_total` and derives `followup_rate_percent`
+- Tracks `action_items_sum` / `action_items_count` and derives `action_items_avg`
+- Generates display names and makes `&metric=` filtering work
 
-```typescript
-// Average action items per conversation
-const actionItemsSum = metrics.get('action_items_total');
-const actionItemsCount = metrics.get('action_items_count');
-if (actionItemsSum !== undefined && actionItemsCount !== undefined && actionItemsCount > 0) {
-  derived.push({
-    date,
-    metricName: 'action_items_avg_per_conversation',
-    value: Math.round((actionItemsSum / actionItemsCount) * 100) / 100,
-  });
-}
-```
+See [config-driven-metrics-plan.md](./config-driven-metrics-plan.md) for all primitive types and options.
 
 ---
 

@@ -344,7 +344,9 @@ The conversations list endpoint (`GET /tenants/{id}/conversations`) can include 
 }
 ```
 
-The config is read by CDK at deploy time and passed to the API Lambda. Each conversation in the list response will include the specified fields extracted from its operator results.
+The config file is deployed to S3 (`s3://{raw-bucket}/config/`) at deploy time. The API Lambda reads it on cold start and caches it in memory. To update, edit the file and redeploy.
+
+> **Note:** This config will be replaced by the `surfaceInList` flag in `config/operator-metrics.json` once the config-driven metrics system is fully implemented.
 
 **Performance note:** This makes one additional DynamoDB query per conversation in the list. Safe up to ~500 conversations per request. For larger datasets, consider the indexed approach described in the Roadmap.
 

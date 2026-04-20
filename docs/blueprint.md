@@ -439,7 +439,7 @@ LIMIT 10
 
 ## 9. Customization Surfaces
 
-Customers have two explicit, bounded places to customize:
+Customers have three explicit, bounded places to customize:
 
 ### Surface 1: Operator Schemas (no-code)
 
@@ -489,22 +489,20 @@ export async function enrich(ctx: EnrichmentContext): Promise<EnrichmentResult> 
 - If enrichment fails, the record is still written (with `enrichmentError` flag)
 - Enrichment errors are logged but don't block ingest
 
-### Surface 3: Custom Metrics (optional)
+### Surface 3: Operator Metrics Config (no-code)
 
-Add custom metrics tracking in `services/processor/src/storage/dynamo.ts`:
-
-```typescript
-// In updateAggregates function
-if (operatorName === 'my-custom-operator') {
-  const customValue = payload.my_field as number;
-  if (typeof customValue === 'number') {
-    await incrementMetric(tenantId, date, 'custom_metric_sum', customValue);
-    await incrementMetric(tenantId, date, 'custom_metric_count', 1);
-  }
-}
+```
+/config/operator-metrics.json
 ```
 
-Then compute derived metrics in `services/api/src/handlers/metrics.ts` for API access, or query directly via Athena.
+Define how operator result fields are aggregated into metrics using primitive types (boolean, integer, category, enum, category_array). No TypeScript code needed — the aggregation engine reads this config and handles all metric computation automatically.
+
+- Define metric primitives per operator field
+- Auto-generates derived metrics (averages, rates, percentages)
+- Auto-generates display names (supports localization)
+- Controls which fields appear in the conversations list view (`surfaceInList`)
+
+See [config-driven-metrics-plan.md](./config-driven-metrics-plan.md) for the full design and [README.md](../README.md#configure-operator-metrics) for usage.
 
 ---
 
