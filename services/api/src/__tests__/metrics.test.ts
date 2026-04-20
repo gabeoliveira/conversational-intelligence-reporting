@@ -10,6 +10,47 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
   QueryCommand: jest.fn().mockImplementation((input: any) => ({ input })),
 }));
 
+// Mock @cirl/shared — provide config-driven functions
+jest.mock('@cirl/shared', () => ({
+  ensureConfigLoaded: jest.fn().mockResolvedValue(undefined),
+  buildDerivedMetricDependencies: jest.fn().mockReturnValue({
+    'poc_csat_avg': ['poc_csat_sum', 'poc_csat_count'],
+    'poc_ai_retained_rate_percent': ['poc_ai_retained_count', 'poc_ai_retained_total'],
+  }),
+  configFriendlyMetricName: jest.fn().mockImplementation((name: string) => {
+    // Simulate config-driven display names for topics/CSAT
+    if (name.startsWith('poc_subtopic_')) {
+      const val = name.replace('poc_subtopic_', '').replace(/_/g, ' ').replace(/\s+-\s+/g, ' - ');
+      return val.replace(/(^|\s)\S/g, (c: string) => c.toUpperCase()).trim();
+    }
+    if (name.startsWith('poc_topic_')) {
+      const val = name.replace('poc_topic_', '').replace(/_/g, ' ');
+      return val.replace(/(^|\s)\S/g, (c: string) => c.toUpperCase()).trim();
+    }
+    if (/^poc_csat_[1-5]$/.test(name)) {
+      return `CSAT ${name.charAt(name.length - 1)}`;
+    }
+    const configNames: Record<string, string> = {
+      'conversation_count': 'Conversas',
+      'sentiment_avg': 'Sentimento Médio',
+      'poc_csat_avg': 'CSAT Médio',
+    };
+    return configNames[name] || name;
+  }),
+  computeConfigDerivedMetrics: jest.fn().mockImplementation(
+    (date: string, metricsMap: Map<string, number>) => {
+      const derived: Array<{ date: string; metricName: string; value: number }> = [];
+      // Simulate config-driven: poc_csat_avg
+      const csatSum = metricsMap.get('poc_csat_sum');
+      const csatCount = metricsMap.get('poc_csat_count');
+      if (csatSum !== undefined && csatCount !== undefined && csatCount > 0) {
+        derived.push({ date, metricName: 'poc_csat_avg', value: Math.round((csatSum / csatCount) * 100) / 100 });
+      }
+      return derived;
+    }
+  ),
+}));
+
 process.env.TABLE_NAME = 'cirl-test';
 
 import { getMetrics } from '../handlers/metrics';

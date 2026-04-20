@@ -11,7 +11,7 @@ CIRL currently requires custom TypeScript code for every new operator's metrics.
 | `if (operatorName === 'Analytics') { ... }` blocks | `processor/dynamo.ts` | New operator = new code |
 | `derivedMetricDependencies` map | `api/metrics.ts` | Every derived metric manually mapped |
 | `friendlyMetricName` display names | `api/metrics.ts` | Hardcoded Portuguese strings |
-| `operator-fields.json` | `config/` | Separate config for conversation enrichment |
+| `operator-fields.json` | `config/` | ~~Separate config for conversation enrichment~~ **Removed** — replaced by `surfaceInList` flag |
 
 ## What We're Building
 
@@ -115,18 +115,18 @@ Optional modifiers:
 | 1 | **Config schema** | TypeScript interfaces for the config shape | Nothing | **Done** |
 | 2 | **Config storage** | S3-based loading with in-memory cache | #1 | **Done** |
 | 3 | **Aggregation engine** | Generic processor that reads config and writes metrics by primitive type | #1, #2 | **Done** |
-| 4 | **API derived metrics** | Auto-generates dependency map + computes derived values from config | #1, #2 | Pending |
-| 5 | **API display names** | Returns `displayName` from config instead of hardcoded map | #1, #2 | Pending |
-| 6 | **Conversation enrichment** | Reads `surfaceInList` from config for list view fields | #1, #2 | Pending |
+| 4 | **API derived metrics** | Auto-generates dependency map + computes derived values from config | #1, #2 | **Done** |
+| 5 | **API display names** | Returns `displayName` from config instead of hardcoded map | #1, #2 | **Done** |
+| 6 | **Conversation enrichment** | Reads `surfaceInList` from config for list view fields | #1, #2 | **Done** |
 | 7 | **Config management API** | CRUD endpoints for managing configs (optional for MVP) | #1, #2 | Deferred |
 
-Items 1-3 are complete. Items 4-6 are next (Phase 3). Item 7 is deferred — configs are managed via file + redeploy.
+Items 1-6 are complete. Item 7 is deferred — configs are managed via file + redeploy.
 
 ### 4. Storage Decision
 
 **Decided: S3.**
 
-Config files (`config/operator-metrics.json`, `config/operator-fields.json`) are deployed to S3 (`s3://{raw-bucket}/config/`) at deploy time via CDK `BucketDeployment`. Lambdas read them on cold start and cache in memory.
+Config file (`config/operator-metrics.json`) is deployed to S3 (`s3://{raw-bucket}/config/`) at deploy time via CDK `BucketDeployment`. Lambdas read it on cold start and cache in memory.
 
 | Option | Pros | Cons | Status |
 |---|---|---|---|
@@ -309,15 +309,17 @@ function buildDisplayNames(configs: OperatorConfig[]): Record<string, string> {
 
 The config-driven system coexists with hardcoded blocks during migration:
 
-1. ~~Build config schema and loader~~ — **Done** (`packages/shared/src/operator-config.ts`, `config-loader.ts`, `s3-config.ts`)
-2. ~~Create configs for existing operators~~ — **Done** (`config/operator-metrics.json` with Analytics + General KPIs)
-3. ~~Deploy config to S3~~ — **Done** (CDK `BucketDeployment` to `s3://{bucket}/config/`)
-4. ~~Build the generic aggregation engine~~ — **Done** (`services/processor/src/storage/aggregation-engine.ts`)
-5. ~~Wire into processor handler with fallback to hardcoded~~ — **Done** (config-driven first, hardcoded fallback)
-6. ~~Verify parity between config-driven and hardcoded output~~ — **Done** (deployed to dev, verified metrics match)
-7. Build API auto-derived metrics and auto-display names from config
-8. Remove hardcoded aggregation blocks
-9. Migrate `operator-fields.json` into `operator-metrics.json` (`surfaceInList` flag)
+1. ~~Build config schema and loader~~ — **Done**
+2. ~~Create configs for existing operators~~ — **Done**
+3. ~~Deploy config to S3~~ — **Done**
+4. ~~Build the generic aggregation engine~~ — **Done**
+5. ~~Wire into processor handler~~ — **Done**
+6. ~~Verify parity between config-driven and hardcoded output~~ — **Done**
+7. ~~Build API auto-derived metrics and auto-display names~~ — **Done** (`config-derived.ts`)
+8. ~~Remove hardcoded aggregation blocks~~ — **Done** (~260 lines removed from `dynamo.ts`)
+9. ~~Migrate `operator-fields.json` into `surfaceInList`~~ — **Done** (file deleted)
+
+**All migration steps complete.** Config-driven metrics system is fully operational.
 
 ### 8. What This Unlocks
 

@@ -167,12 +167,10 @@ describe('processor handler', () => {
     await expect(handler(makeEvent())).rejects.toThrow('DynamoDB throttle');
   });
 
-  it('uses config-driven aggregation when config exists', async () => {
-    mockAggregateFromConfig.mockResolvedValueOnce(true);
-
+  it('calls both config-driven and generic aggregation', async () => {
     await handler(makeEvent());
 
-    // Config-driven engine was called
+    // Config-driven engine called for operator-specific metrics
     expect(mockAggregateFromConfig).toHaveBeenCalledWith(
       'test-tenant',
       '20260127',
@@ -180,25 +178,12 @@ describe('processor handler', () => {
       expect.any(Object)
     );
 
-    // updateAggregates still called (for generic counts) but with empty payload
+    // Generic updateAggregates always called (operator count + conversation dedup)
     expect(mockUpdateAggregates).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: {},
-      })
-    );
-  });
-
-  it('falls back to hardcoded aggregation when no config', async () => {
-    mockAggregateFromConfig.mockResolvedValueOnce(false);
-
-    await handler(makeEvent());
-
-    // updateAggregates called with full payload (hardcoded path)
-    expect(mockUpdateAggregates).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          _operator_type: 'json',
-        }),
+        tenantId: 'test-tenant',
+        conversationId: 'C1',
+        operatorName: 'test-operator',
       })
     );
   });

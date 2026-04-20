@@ -332,21 +332,19 @@ Stat panels should use **Calculation: Last (not null)** to pick up the period va
 
 The conversations list endpoint (`GET /tenants/{id}/conversations`) can include operator result fields alongside conversation metadata. This enables drill-down in BI tools — for example, filtering conversations by `handoff_reason` without a separate query.
 
-**Configuration:** Edit `config/operator-fields.json` to define which fields to surface:
+**Configuration:** Set `surfaceInList: true` on any metric in `config/operator-metrics.json`:
 
 ```json
 {
-  "operators": {
-    "Analytics": {
-      "fields": ["handoff_reason"]
-    }
-  }
+  "field": "handoff_reason",
+  "type": "enum",
+  "metricPrefix": "poc_handoff",
+  "displayName": "Transbordo",
+  "surfaceInList": true
 }
 ```
 
-The config file is deployed to S3 (`s3://{raw-bucket}/config/`) at deploy time. The API Lambda reads it on cold start and caches it in memory. To update, edit the file and redeploy.
-
-> **Note:** This config will be replaced by the `surfaceInList` flag in `config/operator-metrics.json` once the config-driven metrics system is fully implemented.
+The config is deployed to S3 and read by the API Lambda on cold start. Fields with `surfaceInList: true` are automatically extracted from operator results and included in the conversations list response.
 
 **Performance note:** This makes one additional DynamoDB query per conversation in the list. Safe up to ~500 conversations per request. For larger datasets, consider the indexed approach described in the Roadmap.
 

@@ -1,8 +1,0 @@
-{
-  "description": "Operator fields to include in the conversations list view. Each entry maps an operator name to the fields that should be surfaced from its enrichedPayload.",
-  "operators": {
-    "Analytics": {
-      "fields": ["handoff_reason"]
-    }
-  }
-}

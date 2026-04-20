@@ -12,6 +12,14 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
   GetCommand: jest.fn().mockImplementation((input: any) => ({ input })),
 }));
 
+jest.mock('@cirl/shared', () => ({
+  ensureConfigLoaded: jest.fn().mockResolvedValue(undefined),
+  buildDerivedMetricDependencies: jest.fn().mockReturnValue({}),
+  configFriendlyMetricName: jest.fn().mockImplementation((name: string) => name),
+  computeConfigDerivedMetrics: jest.fn().mockReturnValue([]),
+  getListSurfaceFields: jest.fn().mockReturnValue({}),
+}));
+
 process.env.TABLE_NAME = 'cirl-test';
 process.env.RAW_BUCKET_NAME = 'cirl-raw-test';
 

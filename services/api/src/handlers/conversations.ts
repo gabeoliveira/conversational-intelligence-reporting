@@ -4,62 +4,11 @@ import {
   QueryCommand,
   QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { ensureConfigLoaded, getListSurfaceFields } from '@cirl/shared';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
-const s3Client = new S3Client({});
 const TABLE_NAME = process.env.TABLE_NAME!;
-
-// Operator fields config — loaded from S3 on first use, cached in memory
-let operatorFieldsConfig: Record<string, string[]> | null = null;
-
-async function getOperatorFieldsConfig(): Promise<Record<string, string[]>> {
-  if (operatorFieldsConfig !== null) return operatorFieldsConfig;
-
-  // Try S3 first
-  const bucket = process.env.CONFIG_BUCKET;
-  const prefix = process.env.CONFIG_PREFIX || 'config/';
-  if (bucket) {
-    try {
-      const response = await s3Client.send(new GetObjectCommand({
-        Bucket: bucket,
-        Key: `${prefix}operator-fields.json`,
-      }));
-      const body = await response.Body?.transformToString();
-      if (body) {
-        const parsed = JSON.parse(body);
-        operatorFieldsConfig = {};
-        for (const [name, conf] of Object.entries(parsed.operators || {})) {
-          operatorFieldsConfig[name] = (conf as { fields: string[] }).fields;
-        }
-        return operatorFieldsConfig;
-      }
-    } catch (error: any) {
-      if (error.name !== 'NoSuchKey') {
-        console.error('Failed to load operator-fields.json from S3:', error);
-      }
-    }
-  }
-
-  // Fallback: env var (backward compatibility)
-  const envConfig = process.env.OPERATOR_FIELDS_CONFIG;
-  if (envConfig) {
-    try {
-      const parsed = JSON.parse(envConfig);
-      operatorFieldsConfig = {};
-      for (const [name, conf] of Object.entries(parsed.operators || {})) {
-        operatorFieldsConfig[name] = (conf as { fields: string[] }).fields;
-      }
-      return operatorFieldsConfig;
-    } catch {
-      // Invalid JSON
-    }
-  }
-
-  operatorFieldsConfig = {};
-  return operatorFieldsConfig;
-}
 
 interface ListConversationsParams {
   from?: string;
@@ -177,8 +126,9 @@ export async function listConversations(
     };
   });
 
-  // Enrich with operator fields if config is defined
-  const fieldsConfig = await getOperatorFieldsConfig();
+  // Enrich with operator fields from config (surfaceInList flag)
+  await ensureConfigLoaded();
+  const fieldsConfig = getListSurfaceFields();
   const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
   const items = hasOperatorFields
     ? await enrichWithOperatorFields(tenantId, baseItems, fieldsConfig)

@@ -89,32 +89,19 @@ export async function handler(
       receivedAt,
     });
 
-    // 8. Update aggregates (operator metrics + timing metrics if available)
-    // Try config-driven aggregation first; fall back to hardcoded blocks
+    // 8. Update aggregates
+    // Config-driven: operator-specific metrics from config
     const configDate = formatDate(new Date(receivedAt));
-    const handledByConfig = await aggregateFromConfig(tenantId, configDate, operatorName, enrichedPayload);
+    await aggregateFromConfig(tenantId, configDate, operatorName, enrichedPayload);
 
-    if (!handledByConfig) {
-      // No config for this operator — use hardcoded aggregation (legacy)
-      await updateAggregates({
-        tenantId,
-        conversationId,
-        operatorName,
-        payload: enrichedPayload,
-        receivedAt,
-      });
-    } else {
-      // Config handled operator-specific metrics, but we still need:
-      // - operator count (generic, always tracked)
-      // - conversation count dedup (generic, always tracked)
-      await updateAggregates({
-        tenantId,
-        conversationId,
-        operatorName,
-        payload: {}, // Empty payload — skips all operator-specific blocks
-        receivedAt,
-      });
-    }
+    // Generic: operator count + conversation count dedup (always runs)
+    await updateAggregates({
+      tenantId,
+      conversationId,
+      operatorName,
+      payload: enrichedPayload,
+      receivedAt,
+    });
 
     // 9. Update timing metrics (from transcript sentences, if present)
     const timingMetrics = (metadata as Record<string, unknown>)?.timingMetrics as

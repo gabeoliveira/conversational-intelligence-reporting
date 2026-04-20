@@ -464,8 +464,7 @@ See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for
 ```
 ├── config/
 │   ├── schemas/            # Operator JSON schemas (Twilio validation)
-│   ├── operator-metrics.json  # Metric aggregation config — deployed to S3
-│   └── operator-fields.json   # Conversation list enrichment — deployed to S3
+│   └── operator-metrics.json  # Metric aggregation + enrichment config — deployed to S3
 ├── dashboards/            # BI dashboard templates (Grafana, QuickSight, Tableau, etc.)
 ├── docs/                  # Documentation
 │   ├── LAKEHOUSE-ARCHITECTURE.md  # Lakehouse design (Bronze/Silver/Gold)
@@ -555,16 +554,19 @@ If BI reporting is your only use case and you don't need the REST API:
 
 ## Roadmap
 
-### Config-Driven Operator Metrics (In Progress)
+### Config-Driven Operator Metrics (Complete)
 
-The config schema, loader, S3 storage, and aggregation engine are implemented. Operators with a config entry in `config/operator-metrics.json` are automatically processed by the generic engine. Operators without a config fall back to hardcoded blocks. Remaining work:
+Adding metrics for a new operator requires no code changes. Edit `config/operator-metrics.json` with your operator's fields and primitive types, redeploy, and the system handles:
 
-- **API auto-derived metrics** — auto-generates dependency maps and display names from config (currently hardcoded)
-- **API auto-display names** — generates `displayName` from config instead of hardcoded map
-- **Migration** — remove hardcoded aggregation blocks once API is config-driven
-- **Migrate `operator-fields.json`** — replace with `surfaceInList` flag in operator-metrics config
+- Metric aggregation (processor)
+- Derived metric computation (API)
+- Display names in Portuguese or any language (API)
+- Conversation list enrichment via `surfaceInList` flag (API)
+- `&metric=` filter support for all derived metrics (API)
 
-See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full implementation plan.
+Built-in legacy metrics (timing, sentiment, quality from the `conversation-intelligence` operator) are still handled by hardcoded logic in the API. These will be migrated to config when those operators are onboarded.
+
+See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design and migration history.
 
 ### API Gateway Authentication (Planned)
 
@@ -646,7 +648,7 @@ This is not included as a template option because the cost savings are minimal f
 
 ## Testing
 
-CIRL includes 101 unit tests covering the ingestion, processing, API, and shared config layers.
+CIRL includes 100 unit tests covering the ingestion, processing, API, and shared config layers.
 
 ```bash
 # Run all tests
