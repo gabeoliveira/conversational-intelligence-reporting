@@ -61,10 +61,10 @@ const builtInDerivedDependencies: Record<string, string[]> = {
  */
 const builtInDisplayNames: Record<string, string> = {
   'conversation_count': 'Conversas',
-  'avg_handling_time_sec': 'Tempo Médio de Atendimento (s)',
-  'avg_response_time_sec': 'Tempo Médio de Resposta (s)',
-  'avg_customer_wait_time_sec': 'Tempo Médio de Espera do Cliente (s)',
-  'sentiment_avg': 'Sentimento Médio',
+  'avg_handling_time_sec': 'Tempo Média de Atendimento (s)',
+  'avg_response_time_sec': 'Tempo Média de Resposta (s)',
+  'avg_customer_wait_time_sec': 'Tempo Média de Espera do Cliente (s)',
+  'sentiment_avg': 'Sentimento Média',
   'transfer_rate_percent': 'Taxa de Transferência (%)',
   'virtual_agent_quality_avg': 'Qualidade do Agente Virtual',
   'human_agent_quality_avg': 'Qualidade do Agente Humano',

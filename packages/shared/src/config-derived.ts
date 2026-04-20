@@ -98,7 +98,7 @@ export function buildDisplayNames(): Record<string, string> {
           const m = metric as IntegerMetric;
           names[`${m.metricPrefix}_sum`] = `${m.displayName} (Soma)`;
           names[`${m.metricPrefix}_count`] = `${m.displayName} (Contagem)`;
-          names[`${m.metricPrefix}_avg`] = `${m.displayName} Médio`;
+          names[`${m.metricPrefix}_avg`] = `${m.displayName} Média`;
           // Distribution buckets get display name from the value
           if (m.distribution && m.min !== undefined && m.max !== undefined) {
             for (let i = m.min; i <= m.max; i++) {

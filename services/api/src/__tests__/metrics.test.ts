@@ -32,8 +32,8 @@ jest.mock('@cirl/shared', () => ({
     }
     const configNames: Record<string, string> = {
       'conversation_count': 'Conversas',
-      'sentiment_avg': 'Sentimento Médio',
-      'poc_csat_avg': 'CSAT Médio',
+      'sentiment_avg': 'Sentimento Média',
+      'poc_csat_avg': 'CSAT Média',
     };
     return configNames[name] || name;
   }),
@@ -100,7 +100,7 @@ describe('getMetrics', () => {
     const avg = result.metrics.find((m) => m.metricName === 'sentiment_avg');
     expect(avg).toBeDefined();
     expect(avg!.value).toBe(75);
-    expect((avg as any).displayName).toBe('Sentimento Médio');
+    expect((avg as any).displayName).toBe('Sentimento Média');
   });
 
   it('computes avg_handling_time_sec from sum/count', async () => {
