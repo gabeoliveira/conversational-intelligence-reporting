@@ -49,7 +49,7 @@ Works with all analytics modes (`none`, `simple`, `lakehouse`). No AWS credentia
 | Endpoint | Description |
 |---|---|
 | `GET /tenants/{tenantId}/metrics?from=&to=&metric=` | Aggregated metrics (supports derived metrics like `avg_handling_time_sec`) |
-| `GET /tenants/{tenantId}/conversations?from=&to=&agentId=&queueId=&customerKey=` | Conversation list with filters |
+| `GET /tenants/{tenantId}/conversations?from=&to=&agentId=&queueId=&customerKey=&{indexedField}=` | Conversation list with filters. Supports indexed operator field filters (e.g., `?handoff_reason=LACK_OF_KNOWLEDGE`) |
 | `GET /tenants/{tenantId}/conversations/{conversationId}` | Single conversation with operator results |
 
 > **Note:** The response includes both `metricName` (internal, e.g., `poc_topic_atendimento`) and `displayName` (friendly, e.g., `Atendimento`). The `metric` filter parameter uses internal names. Use `displayName` for chart labels and `metricName` for filtering.

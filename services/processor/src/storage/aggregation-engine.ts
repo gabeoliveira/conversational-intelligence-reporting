@@ -22,15 +22,23 @@ import { getOperatorConfig } from '@cirl/shared';
 
 // Import incrementMetric from dynamo.ts — shared write function
 import { incrementMetric } from './dynamo';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+
+const indexClient = new DynamoDBClient({});
+const indexDocClient = DynamoDBDocumentClient.from(indexClient);
+const TABLE_NAME = process.env.TABLE_NAME!;
 
 /**
  * Aggregate metrics for an operator based on its config.
+ * Also writes index records for fields marked surfaceInList.
  * Returns true if a config was found and processed, false if no config exists.
  */
 export async function aggregateFromConfig(
   tenantId: string,
   date: string,
   operatorName: string,
+  conversationId: string,
   payload: Record<string, unknown>
 ): Promise<boolean> {
   const config = getOperatorConfig(operatorName);
@@ -39,6 +47,11 @@ export async function aggregateFromConfig(
   for (const metric of config.metrics) {
     const value = extractField(payload, metric);
     await aggregateByType(tenantId, date, metric, value);
+
+    // Write index record for surfaceInList fields
+    if (metric.surfaceInList && value !== undefined && value !== null) {
+      await writeIndexRecord(tenantId, metric.field, String(value), conversationId, date);
+    }
   }
 
   return true;
@@ -201,4 +214,34 @@ async function aggregateCategoryArray(
       }
     }
   }
+}
+
+/**
+ * Write a denormalized index record for drill-down queries.
+ * Enables O(1) lookup: "all conversations where fieldName = fieldValue"
+ *
+ * PK: TENANT#{tenantId}#IDX#{fieldName}#{normalizedValue}
+ * SK: TS#{timestamp}#CONV#{conversationId}
+ */
+async function writeIndexRecord(
+  tenantId: string,
+  fieldName: string,
+  fieldValue: string,
+  conversationId: string,
+  timestamp: string
+): Promise<void> {
+  const normalizedValue = fieldValue.toLowerCase().replace(/\s+/g, '_');
+
+  await indexDocClient.send(new PutCommand({
+    TableName: TABLE_NAME,
+    Item: {
+      PK: `TENANT#${tenantId}#IDX#${fieldName}#${normalizedValue}`,
+      SK: `TS#${timestamp}#CONV#${conversationId}`,
+      tenantId,
+      conversationId,
+      fieldName,
+      fieldValue: normalizedValue,
+      entityType: 'INDEX',
+    },
+  }));
 }

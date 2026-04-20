@@ -4,11 +4,25 @@ jest.mock('../storage/dynamo', () => ({
   incrementMetric: mockIncrementMetric,
 }));
 
+// Mock DynamoDB for index writes
+const mockDocSend = jest.fn().mockResolvedValue({});
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
+}));
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({ send: mockDocSend })),
+  },
+  PutCommand: jest.fn().mockImplementation((input: any) => ({ input })),
+}));
+
 // Mock @cirl/shared config loader
 const mockGetOperatorConfig = jest.fn();
 jest.mock('@cirl/shared', () => ({
   getOperatorConfig: mockGetOperatorConfig,
 }));
+
+process.env.TABLE_NAME = 'cirl-test';
 
 import { aggregateFromConfig } from '../storage/aggregation-engine';
 import type { OperatorConfig } from '@cirl/shared';
@@ -66,14 +80,14 @@ describe('aggregation-engine', () => {
   describe('aggregateFromConfig', () => {
     it('returns false when no config exists for operator', async () => {
       mockGetOperatorConfig.mockReturnValue(undefined);
-      const result = await aggregateFromConfig('tenant', '20260127', 'UnknownOp', {});
+      const result = await aggregateFromConfig('tenant', '20260127', 'UnknownOp', 'C1', {});
       expect(result).toBe(false);
       expect(mockIncrementMetric).not.toHaveBeenCalled();
     });
 
     it('returns true when config exists', async () => {
       mockGetOperatorConfig.mockReturnValue(analyticsConfig);
-      const result = await aggregateFromConfig('tenant', '20260127', 'TestOp', { passed: true });
+      const result = await aggregateFromConfig('tenant', '20260127', 'TestOp', 'C1', { passed: true });
       expect(result).toBe(true);
     });
   });
@@ -84,13 +98,13 @@ describe('aggregation-engine', () => {
     });
 
     it('increments count and total when true', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { passed: true });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { passed: true });
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_passed_count', 1);
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_passed_total', 1);
     });
 
     it('increments only total when false', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { passed: false });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { passed: false });
       const countCall = mockIncrementMetric.mock.calls.find(
         (c: any[]) => c[2] === 'test_passed_count'
       );
@@ -99,7 +113,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips when value is not boolean', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { passed: 'yes' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { passed: 'yes' });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_passed')
       );
@@ -113,14 +127,14 @@ describe('aggregation-engine', () => {
     });
 
     it('increments sum, count, and distribution', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { score: 7 });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { score: 7 });
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_score_sum', 7);
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_score_count', 1);
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_score_7', 1);
     });
 
     it('skips values below min', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { score: 0 });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { score: 0 });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_score')
       );
@@ -128,7 +142,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips values above max', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { score: 11 });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { score: 11 });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_score')
       );
@@ -136,7 +150,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips non-numbers', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { score: 'high' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { score: 'high' });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_score')
       );
@@ -150,12 +164,12 @@ describe('aggregation-engine', () => {
     });
 
     it('increments normalized category count', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { label: 'Renda Fixa' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { label: 'Renda Fixa' });
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_label_renda_fixa', 1);
     });
 
     it('skips empty strings', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { label: '' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { label: '' });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_label')
       );
@@ -163,7 +177,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips non-strings', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { label: 42 });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { label: 42 });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_label')
       );
@@ -177,13 +191,13 @@ describe('aggregation-engine', () => {
     });
 
     it('increments value count and total', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { status: 'ACTIVE' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { status: 'ACTIVE' });
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_status_active', 1);
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_status_total', 1);
     });
 
     it('skips ignored values', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { status: 'NONE' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { status: 'NONE' });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_status')
       );
@@ -191,7 +205,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips non-strings', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { status: 123 });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { status: 123 });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_status')
       );
@@ -205,7 +219,7 @@ describe('aggregation-engine', () => {
     });
 
     it('increments category and subcategory for each item', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', {
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', {
         topics: [
           { primary: 'RENDA FIXA', detail: 'RESGATE' },
           { primary: 'POUPANÇA', detail: 'RENTABILIDADE' },
@@ -220,7 +234,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips items without category field', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', {
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', {
         topics: [{ detail: 'RESGATE' }],
       });
       const calls = mockIncrementMetric.mock.calls.filter(
@@ -230,7 +244,7 @@ describe('aggregation-engine', () => {
     });
 
     it('handles items without subcategory', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', {
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', {
         topics: [{ primary: 'RENDA FIXA' }],
       });
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_topic_renda_fixa', 1);
@@ -242,7 +256,7 @@ describe('aggregation-engine', () => {
     });
 
     it('skips non-arrays', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { topics: 'not an array' });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { topics: 'not an array' });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_topic')
       );
@@ -250,7 +264,7 @@ describe('aggregation-engine', () => {
     });
 
     it('handles empty array', async () => {
-      await aggregateFromConfig('t', '20260127', 'TestOp', { topics: [] });
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', { topics: [] });
       const calls = mockIncrementMetric.mock.calls.filter(
         (c: any[]) => c[2].startsWith('test_topic')
       );
@@ -261,7 +275,7 @@ describe('aggregation-engine', () => {
   describe('multiple metrics in one call', () => {
     it('processes all metrics from config', async () => {
       mockGetOperatorConfig.mockReturnValue(analyticsConfig);
-      await aggregateFromConfig('t', '20260127', 'TestOp', {
+      await aggregateFromConfig('t', '20260127', 'TestOp', 'C1', {
         passed: true,
         score: 8,
         label: 'Important',
@@ -284,6 +298,116 @@ describe('aggregation-engine', () => {
       // Category array
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_topic_test', 1);
       expect(mockIncrementMetric).toHaveBeenCalledWith('t', '20260127', 'test_subtopic_test_-_detail', 1);
+    });
+  });
+
+  describe('index records', () => {
+    it('writes index record for surfaceInList fields', async () => {
+      const configWithSurface: OperatorConfig = {
+        operatorName: 'IndexedOp',
+        displayName: 'Indexed',
+        metrics: [
+          {
+            field: 'status',
+            type: 'enum',
+            metricPrefix: 'idx_status',
+            displayName: 'Status',
+            values: ['ACTIVE', 'INACTIVE'],
+            surfaceInList: true,
+          },
+          {
+            field: 'score',
+            type: 'integer',
+            metricPrefix: 'idx_score',
+            displayName: 'Score',
+            surfaceInList: true,
+          },
+          {
+            field: 'internal',
+            type: 'boolean',
+            metricPrefix: 'idx_internal',
+            displayName: 'Internal',
+            surfaceInList: false,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithSurface);
+
+      await aggregateFromConfig('t', '20260127', 'IndexedOp', 'GT123', {
+        status: 'ACTIVE',
+        score: 8,
+        internal: true,
+      });
+
+      // Index records written for surfaceInList fields
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(2); // status + score, not internal
+
+      // Verify PK format for status
+      const statusIndex = putCalls.find(
+        (c: any[]) => c[0].input.Item.fieldName === 'status'
+      );
+      expect(statusIndex).toBeDefined();
+      expect(statusIndex![0].input.Item.PK).toBe('TENANT#t#IDX#status#active');
+      expect(statusIndex![0].input.Item.SK).toBe('TS#20260127#CONV#GT123');
+      expect(statusIndex![0].input.Item.conversationId).toBe('GT123');
+
+      // Verify PK format for score
+      const scoreIndex = putCalls.find(
+        (c: any[]) => c[0].input.Item.fieldName === 'score'
+      );
+      expect(scoreIndex).toBeDefined();
+      expect(scoreIndex![0].input.Item.PK).toBe('TENANT#t#IDX#score#8');
+    });
+
+    it('does not write index for fields without surfaceInList', async () => {
+      const configNoSurface: OperatorConfig = {
+        operatorName: 'NoIndex',
+        displayName: 'No Index',
+        metrics: [
+          {
+            field: 'passed',
+            type: 'boolean',
+            metricPrefix: 'ni_passed',
+            displayName: 'Passed',
+            // surfaceInList not set (defaults to falsy)
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configNoSurface);
+
+      await aggregateFromConfig('t', '20260127', 'NoIndex', 'GT456', { passed: true });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(0);
+    });
+
+    it('does not write index for null/undefined values', async () => {
+      const configWithSurface: OperatorConfig = {
+        operatorName: 'NullOp',
+        displayName: 'Null',
+        metrics: [
+          {
+            field: 'missing_field',
+            type: 'category',
+            metricPrefix: 'null_test',
+            displayName: 'Missing',
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithSurface);
+
+      await aggregateFromConfig('t', '20260127', 'NullOp', 'GT789', {});
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(0);
     });
   });
 });

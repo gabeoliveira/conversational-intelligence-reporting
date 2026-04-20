@@ -307,7 +307,7 @@ DOTENV_CONFIG_PATH=$(pwd)/.env.poc npm run backfill
 All tests are implemented. From the project root:
 
 ```bash
-# Run all 100 tests
+# Run all 103 tests
 npm test
 
 # Run a specific test file
@@ -334,7 +334,7 @@ npx jest --watch
 | Signature validation | `services/ingest/src/__tests__/validate-signature.test.ts` | 6 | Valid/invalid signatures, body hash mismatch, tampered body, missing params |
 | Ingest handler | `services/ingest/src/__tests__/handler.test.ts` | 10 | Twilio webhook flow, legacy webhook, request validation, signature check, timing in S3/EventBridge payloads |
 | Processor handler | `services/processor/src/__tests__/handler.test.ts` | 7 | End-to-end processing, timing aggregates trigger, schema failure passthrough, enrichment failure, DynamoDB error retry, config + generic aggregation |
-| Aggregation engine | `services/processor/src/__tests__/aggregation-engine.test.ts` | 21 | All 5 primitive types (boolean, integer, category, enum, category_array), edge cases, min/max guards, ignored values, multi-metric payloads |
+| Aggregation engine | `services/processor/src/__tests__/aggregation-engine.test.ts` | 24 | All 5 primitive types, edge cases, min/max guards, ignored values, multi-metric payloads, index record writes for surfaceInList fields |
 | Timing aggregates | `services/processor/src/__tests__/timing-aggregates.test.ts` | 4 | DynamoDB sum/count increments, zero value skipping, additive to existing values, date formatting |
 | API metrics | `services/api/src/__tests__/metrics.test.ts` | 13 | Derived metrics (sentiment, AHT, response time, transfer rate), period-level aggregates, display names (Portuguese), topic/CSAT friendly names, date grouping, filtering |
 | API handler | `services/api/src/__tests__/handler.test.ts` | 6 | Route dispatching, CORS headers, OPTIONS preflight, missing tenant 400, conversation enrichment |

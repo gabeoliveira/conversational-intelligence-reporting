@@ -18,12 +18,22 @@ interface ListConversationsParams {
   customerKey?: string;
   limit?: string;
   nextToken?: string;
+  [key: string]: string | undefined; // Allow arbitrary query params for index filters
 }
 
 export async function listConversations(
   tenantId: string,
   params: ListConversationsParams
 ): Promise<{ items: unknown[]; nextToken?: string }> {
+  // Load config and check for indexed field filters
+  await ensureConfigLoaded();
+  const surfaceFields = getListSurfaceFields();
+  const allSurfaceFieldNames = Object.values(surfaceFields).flat();
+  const indexFilter = findIndexFilter(params, allSurfaceFieldNames);
+
+  if (indexFilter) {
+    return queryByIndex(tenantId, indexFilter, params);
+  }
   const { from, to, agentId, queueId, customerKey, limit = '50', nextToken } = params;
   const pageLimit = Math.min(parseInt(limit, 10) || 50, 500);
 
@@ -127,7 +137,7 @@ export async function listConversations(
   });
 
   // Enrich with operator fields from config (surfaceInList flag)
-  await ensureConfigLoaded();
+  // ensureConfigLoaded already called at top of function
   const fieldsConfig = getListSurfaceFields();
   const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
   const items = hasOperatorFields
@@ -281,4 +291,143 @@ async function enrichWithOperatorFields(
       }
     })
   );
+}
+
+/**
+ * Check if any query parameter matches a surfaceInList field.
+ * Returns the first match, or null if none.
+ */
+function findIndexFilter(
+  params: Record<string, string | undefined>,
+  surfaceFieldNames: string[]
+): { fieldName: string; fieldValue: string } | null {
+  for (const field of surfaceFieldNames) {
+    if (params[field]) {
+      return { fieldName: field, fieldValue: params[field]! };
+    }
+  }
+  return null;
+}
+
+/**
+ * Query conversations by indexed operator field value.
+ * Uses the denormalized index records written at ingestion time.
+ */
+async function queryByIndex(
+  tenantId: string,
+  filter: { fieldName: string; fieldValue: string },
+  params: ListConversationsParams
+): Promise<{ items: unknown[]; nextToken?: string }> {
+  const normalizedValue = filter.fieldValue.toLowerCase().replace(/\s+/g, '_');
+  const pk = `TENANT#${tenantId}#IDX#${filter.fieldName}#${normalizedValue}`;
+  const pageLimit = Math.min(parseInt(params.limit || '50', 10) || 50, 500);
+
+  const queryParams: QueryCommandInput = {
+    TableName: TABLE_NAME,
+    KeyConditionExpression: 'PK = :pk',
+    ExpressionAttributeValues: {
+      ':pk': pk,
+    },
+    ScanIndexForward: false, // Most recent first
+    Limit: pageLimit,
+  };
+
+  // Date range filter on the index SK
+  if (params.from || params.to) {
+    const fromTs = params.from ? formatTimestamp(new Date(params.from)) : '00000000000000';
+    const toTs = params.to ? formatTimestamp(new Date(params.to)).slice(0, 8) + '235959' : '99999999999999';
+    queryParams.KeyConditionExpression += ' AND SK BETWEEN :fromSk AND :toSk';
+    queryParams.ExpressionAttributeValues![':fromSk'] = `TS#${fromTs}`;
+    queryParams.ExpressionAttributeValues![':toSk'] = `TS#${toTs}#CONV#zzzzzzzz`;
+  }
+
+  // Pagination
+  if (params.nextToken) {
+    try {
+      queryParams.ExclusiveStartKey = JSON.parse(Buffer.from(params.nextToken, 'base64').toString());
+    } catch {
+      // Invalid token, ignore
+    }
+  }
+
+  const result = await docClient.send(new QueryCommand(queryParams));
+
+  // Extract conversation IDs from index records
+  const conversationIds = (result.Items || []).map(item => item.conversationId as string);
+
+  // Fetch full conversation details + enrich with operator fields
+  const conversations = await fetchConversationsByIds(tenantId, conversationIds);
+
+  const response: { items: unknown[]; nextToken?: string } = { items: conversations };
+
+  if (result.LastEvaluatedKey) {
+    response.nextToken = Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64');
+  }
+
+  return response;
+}
+
+/**
+ * Fetch full conversation details for a list of conversation IDs.
+ * Each conversation is queried individually (N queries, capped by page limit).
+ * Results are enriched with operator fields if config is set.
+ */
+async function fetchConversationsByIds(
+  tenantId: string,
+  conversationIds: string[]
+): Promise<Array<Record<string, unknown>>> {
+  if (conversationIds.length === 0) return [];
+
+  const fieldsConfig = getListSurfaceFields();
+  const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
+
+  const results = await Promise.all(
+    conversationIds.map(async (convId) => {
+      try {
+        // Note: no Limit here — DynamoDB applies Limit before FilterExpression,
+        // so Limit: 1 would scan 1 item and likely miss the match.
+        const result = await docClient.send(
+          new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk',
+            FilterExpression: 'conversationId = :convId',
+            ExpressionAttributeValues: {
+              ':pk': `TENANT#${tenantId}#CONV`,
+              ':convId': convId,
+            },
+          })
+        );
+
+        if (!result.Items || result.Items.length === 0) return null;
+
+        const item = result.Items[0];
+        const payload = item.payload ? JSON.parse(item.payload as string) : {};
+
+        return {
+          conversationId: item.conversationId as string,
+          tenantId: item.tenantId as string,
+          customerKey: payload.customerKey,
+          channel: payload.channel,
+          agentId: payload.agentId,
+          teamId: payload.teamId,
+          queueId: payload.queueId,
+          startedAt: item.startedAt,
+          operatorCount: payload.operatorCount,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const conversations = results.filter(Boolean) as Array<Record<string, unknown>>;
+
+  // Enrich with operator fields if configured
+  if (hasOperatorFields && conversations.length > 0) {
+    return enrichWithOperatorFields(tenantId, conversations, fieldsConfig);
+  }
+
+  return conversations;
 }

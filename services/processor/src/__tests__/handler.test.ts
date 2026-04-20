@@ -175,6 +175,7 @@ describe('processor handler', () => {
       'test-tenant',
       '20260127',
       'test-operator',
+      'C1',
       expect.any(Object)
     );
 

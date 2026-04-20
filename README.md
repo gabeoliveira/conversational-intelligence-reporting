@@ -170,6 +170,7 @@ Query Parameters:
 - `agentId` - Filter by agent
 - `queueId` - Filter by queue
 - `customerKey` - Filter by customer
+- `{indexedField}` - Filter by any `surfaceInList` operator field (e.g., `handoff_reason=LACK_OF_KNOWLEDGE`)
 - `limit` - Max results (default: 50, max: 500)
 - `nextToken` - Pagination token
 
@@ -599,32 +600,19 @@ Twilio Conversational Intelligence can emit multiple transcripts for the same ca
 
 This ensures only the first transcript per call is processed, regardless of how many transcripts Twilio emits.
 
-### Operator Field Indexing for Drill-Down Queries (Planned)
+### Operator Field Indexing for Drill-Down Queries (Complete)
 
-Currently, there's no way to query "all conversations where operator field X = Y" without scanning all operator results. This limits drill-down capabilities (e.g., "show me all conversations where the handoff reason was lack of knowledge").
+Fields marked `surfaceInList: true` in `config/operator-metrics.json` are automatically indexed at ingestion time. The conversations endpoint supports filtering by any indexed field:
 
-**Planned approach:** Write denormalized index records at ingestion time:
-
-```
-PK: TENANT#{tenantId}#OPFIELD#{fieldName}#{fieldValue}
-SK: TS#{timestamp}#CONV#{conversationId}
-```
-
-For example, a conversation with `motivo_handoff = falta_de_conhecimento` would produce:
-```
-PK: TENANT#poc-inter#OPFIELD#motivo_handoff#falta_de_conhecimento
-SK: TS#20260415143000#CONV#GT123
+```bash
+GET /tenants/{id}/conversations?handoff_reason=LACK_OF_KNOWLEDGE
+GET /tenants/{id}/conversations?inferred_csat=1
+GET /tenants/{id}/conversations?handoff_reason=LACK_OF_COMPREHENSION&from=2026-04-16&to=2026-04-17
 ```
 
-This enables O(1) lookups: "give me all conversations with this handoff reason" is a single DynamoDB query on that PK, paginated and sorted by time.
+Index records use denormalized DynamoDB keys (`PK: TENANT#...#IDX#{field}#{value}`) for O(1) lookups. Existing conversations without index records appear in the unfiltered list as before.
 
-**What's needed:**
-1. Config declares which operator fields to index (ties into config-driven primitives)
-2. Processor writes index records alongside operator results (one extra write per indexed field)
-3. New API endpoint: `GET /tenants/{id}/conversations?operatorField={field}&operatorValue={value}`
-4. Cost: ~1 extra DynamoDB write per indexed field per operator result (negligible at <200K conversations/month)
-
-**Current workaround:** For small datasets (<10K conversations), use BI tool client-side filtering (e.g., Grafana transformations) to filter the conversations table by operator result fields.
+See [docs/indexed-conversations-plan.md](docs/indexed-conversations-plan.md) for the full design.
 
 ### DynamoDB: Keep or Remove?
 
@@ -648,7 +636,7 @@ This is not included as a template option because the cost savings are minimal f
 
 ## Testing
 
-CIRL includes 100 unit tests covering the ingestion, processing, API, and shared config layers.
+CIRL includes 103 unit tests covering the ingestion, processing, API, and shared config layers.
 
 ```bash
 # Run all tests
