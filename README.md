@@ -490,6 +490,7 @@ See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for
 | `AWS_REGION` | Yes | AWS region for deployment |
 | `CIRL_ENV` | Yes | Environment name (dev, demo, poc, prod) |
 | `CIRL_ANALYTICS` | No | Analytics mode: `none` (default), `simple`, or `lakehouse` |
+| `CIRL_AUTH` | No | API authentication: `none` (default) or `apikey` |
 | `CIRL_TENANT_ID` | No | Default tenant ID (for single-tenant) |
 | `TWILIO_ACCOUNT_SID` | Yes | Twilio Account SID |
 | `TWILIO_AUTH_TOKEN` | Yes | Twilio Auth Token |
@@ -569,13 +570,18 @@ Built-in legacy metrics (timing, sentiment, quality from the `conversation-intel
 
 See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design and migration history.
 
-### API Gateway Authentication (Planned)
+### API Gateway Authentication (Complete)
 
-The REST API currently has no authentication. Planned options:
-- **API keys** (default) — one key per tenant, passed as `x-api-key` header. API Gateway handles validation natively. Best for BI tool integrations.
-- **Cognito/JWT** — for multi-tenant deployments with user-level access control. Requires more setup but enables proper RBAC.
+Set `CIRL_AUTH=apikey` in your `.env` file to require an API key on all dashboard endpoints. The webhook endpoint stays open for Twilio.
 
-Controlled via `CIRL_AUTH=none|apikey|cognito` environment variable.
+```bash
+# After deploying with CIRL_AUTH=apikey, retrieve your key:
+aws apigateway get-api-keys --name-query cirl-{env}-key --include-values --query "items[0].value" --output text
+```
+
+Configure in Grafana: Infinity data source → Authentication → add custom header `x-api-key` with the key value.
+
+With `CIRL_AUTH=none` (default), the API is open — suitable for local development and POCs.
 
 ### Hourly Aggregation Granularity (Planned)
 
@@ -668,9 +674,10 @@ See [docs/POC-SETUP.md](docs/POC-SETUP.md#running-tests) for the complete test s
 
 ## Security
 
+- **API Key Authentication**: Dashboard endpoints require `x-api-key` header when `CIRL_AUTH=apikey`. Webhook endpoint stays open for Twilio.
 - **Webhook Signature Validation**: All Twilio webhooks are validated using HMAC-SHA256
 - **Multi-tenant Isolation**: Tenant ID extracted from `X-Tenant-Id` header or defaults
-- **CORS**: Configured for Flex Plugin integration
+- **CORS**: Configured for Flex Plugin integration, includes `x-api-key` in allowed headers
 - **IAM Permissions**: Lambda functions have least-privilege IAM roles
 
 ---

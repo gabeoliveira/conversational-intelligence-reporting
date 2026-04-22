@@ -64,12 +64,18 @@ Quick smoke test — the API should return an empty result, not an error:
 export API_URL="https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/v1"
 export TENANT="poc-customer"
 
-curl -s "$API_URL/tenants/$TENANT/conversations" | jq .
+# If CIRL_AUTH=apikey, retrieve your API key first:
+export API_KEY=$(aws apigateway get-api-keys --name-query cirl-poc-key --include-values --query "items[0].value" --output text --region us-east-1)
+
+# Test with API key (omit -H "x-api-key" if CIRL_AUTH=none)
+curl -s -H "x-api-key: $API_KEY" "$API_URL/tenants/$TENANT/conversations" | jq .
 # Expected: { "items": [], "nextToken": null }
 
-curl -s "$API_URL/tenants/$TENANT/metrics" | jq .
+curl -s -H "x-api-key: $API_KEY" "$API_URL/tenants/$TENANT/metrics" | jq .
 # Expected: { "metrics": [], "period": { "from": "...", "to": "..." } }
 ```
+
+If you get `{"message":"Forbidden"}`, the API key is missing or incorrect.
 
 If you get `{"message":"Internal server error"}`, check CloudWatch logs for `cirl-poc-dashboard`.
 

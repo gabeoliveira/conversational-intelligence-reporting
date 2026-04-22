@@ -369,7 +369,7 @@ The config is deployed to S3 and read by the API Lambda on cold start. Fields wi
 ## Security Best Practices
 
 1. **QuickSight/Tableau/PowerBI/Looker**: Use IAM roles with least-privilege access to Athena, Glue, and S3
-2. **Grafana/Metabase**: Use API keys with tenant-level isolation (planned — see Roadmap)
+2. **Grafana/Metabase**: Set `CIRL_AUTH=apikey` and configure the API key in the data source settings (`x-api-key` header)
 3. **Multi-tenancy**: Always filter by `tenant_id`
 4. **Data masking**: Consider AWS Lake Formation for column-level security
 

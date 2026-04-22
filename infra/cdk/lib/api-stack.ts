@@ -15,6 +15,7 @@ import * as fs from 'fs';
 
 export interface ApiStackProps extends cdk.StackProps {
   envName: string;
+  authMode: 'none' | 'apikey';
   rawBucket: s3.Bucket;
   table: dynamodb.Table;
   eventBus: events.EventBus;
@@ -29,7 +30,7 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { envName, rawBucket, table, eventBus } = props;
+    const { envName, authMode, rawBucket, table, eventBus } = props;
 
     const servicesRoot = path.join(__dirname, '..', '..', '..', 'services');
 
@@ -167,6 +168,8 @@ export class ApiStack extends cdk.Stack {
     rawBucket.grantRead(this.dashboardFunction);
 
     // API Gateway
+    const requireApiKey = authMode === 'apikey';
+
     this.api = new apigateway.RestApi(this, 'Api', {
       restApiName: `cirl-${envName}`,
       description: 'Conversational Intelligence Reporting Layer API',
@@ -178,45 +181,75 @@ export class ApiStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id', 'X-Twilio-Signature'],
+        allowHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id', 'X-Twilio-Signature', 'x-api-key'],
       },
     });
 
-    // Webhook endpoint
+    // API key authentication (when CIRL_AUTH=apikey)
+    let apiKeyMethodOptions: apigateway.MethodOptions = {};
+    if (requireApiKey) {
+      const apiKey = this.api.addApiKey('ApiKey', {
+        apiKeyName: `cirl-${envName}-key`,
+        description: `API key for CIRL ${envName} environment`,
+      });
+
+      const usagePlan = this.api.addUsagePlan('UsagePlan', {
+        name: `cirl-${envName}-usage-plan`,
+        description: `Usage plan for CIRL ${envName}`,
+        throttle: {
+          rateLimit: 50,
+          burstLimit: 100,
+        },
+        apiStages: [{
+          api: this.api,
+          stage: this.api.deploymentStage,
+        }],
+      });
+
+      usagePlan.addApiKey(apiKey);
+
+      // Method options that require API key — applied to dashboard endpoints only
+      apiKeyMethodOptions = {
+        apiKeyRequired: true,
+      };
+    }
+
+    // Webhook endpoint — NO API key required (Twilio needs to POST freely)
     const webhook = this.api.root.addResource('webhook');
     const ciWebhook = webhook.addResource('ci');
     ciWebhook.addMethod('POST', new apigateway.LambdaIntegration(this.ingestFunction));
 
-    // Dashboard API endpoints
+    // Dashboard API endpoints — API key required when authMode=apikey
+    const dashboardIntegration = new apigateway.LambdaIntegration(this.dashboardFunction);
     const tenants = this.api.root.addResource('tenants');
     const tenant = tenants.addResource('{tenantId}');
 
     // /tenants/{tenantId}/conversations
     const conversations = tenant.addResource('conversations');
-    conversations.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
+    conversations.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
 
     // /tenants/{tenantId}/conversations/{conversationId}
     const conversation = conversations.addResource('{conversationId}');
-    conversation.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
+    conversation.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
 
     // /tenants/{tenantId}/metrics
     const metrics = tenant.addResource('metrics');
-    metrics.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
+    metrics.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
 
     // /tenants/{tenantId}/schemas
     const schemas = tenant.addResource('schemas');
-    schemas.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
+    schemas.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
 
     // /tenants/{tenantId}/schemas/{operatorName}/versions/{version}
     const schemaOperator = schemas.addResource('{operatorName}');
     const schemaVersions = schemaOperator.addResource('versions');
     const schemaVersion = schemaVersions.addResource('{version}');
-    schemaVersion.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
+    schemaVersion.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
 
     // /tenants/{tenantId}/views
     const views = tenant.addResource('views');
-    views.addMethod('GET', new apigateway.LambdaIntegration(this.dashboardFunction));
-    views.addMethod('POST', new apigateway.LambdaIntegration(this.dashboardFunction));
+    views.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
+    views.addMethod('POST', dashboardIntegration, apiKeyMethodOptions);
 
     // Store API URL in SSM for easy reference
     new ssm.StringParameter(this, 'ApiUrlParameter', {
@@ -235,5 +268,17 @@ export class ApiStack extends cdk.Stack {
       value: `${this.api.url}webhook/ci`,
       description: 'CI Webhook URL - configure this in your CI service',
     });
+
+    new cdk.CfnOutput(this, 'AuthMode', {
+      value: authMode,
+      description: 'API authentication mode (none or apikey)',
+    });
+
+    if (requireApiKey) {
+      new cdk.CfnOutput(this, 'ApiKeyName', {
+        value: `cirl-${envName}-key`,
+        description: 'API key name — retrieve the key value with: aws apigateway get-api-keys --name-query cirl-{env}-key --include-values',
+      });
+    }
   }
 }

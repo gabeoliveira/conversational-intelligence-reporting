@@ -34,6 +34,17 @@ if (!['none', 'simple', 'lakehouse'].includes(analyticsMode)) {
   );
 }
 
+// Auth mode: "none" (default) or "apikey"
+const authMode = (
+  app.node.tryGetContext('auth') || process.env.CIRL_AUTH || 'none'
+) as 'none' | 'apikey';
+
+if (!['none', 'apikey'].includes(authMode)) {
+  throw new Error(
+    `Invalid CIRL_AUTH value: "${authMode}". Must be "none" or "apikey".`
+  );
+}
+
 const storageStack = new StorageStack(app, `${stackPrefix}StorageStack`, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
@@ -48,6 +59,7 @@ new ApiStack(app, `${stackPrefix}ApiStack`, {
     region: process.env.CDK_DEFAULT_REGION,
   },
   envName: env,
+  authMode,
   rawBucket: storageStack.rawBucket,
   table: storageStack.table,
   eventBus: storageStack.eventBus,
