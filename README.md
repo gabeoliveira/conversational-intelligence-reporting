@@ -12,6 +12,10 @@ Transform Twilio Conversational Intelligence operator results into a queryable d
 - **Multi-tenant support** with flexible schema validation
 - **Demo mode** with sample data for quick evaluation
 
+## Architecture
+
+![CIRL Architecture](docs/architecture-diagram.png)
+
 ## Choose Your Analytics Mode
 
 CIRL supports three analytics modes. All share the same ingestion pipeline, REST API, and DynamoDB storage. They differ in whether and how BI tools query the data via Athena.
