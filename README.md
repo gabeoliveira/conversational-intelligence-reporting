@@ -558,69 +558,31 @@ If BI reporting is your only use case and you don't need the REST API:
 
 ---
 
-## Roadmap
+## Key Features
 
-### Config-Driven Operator Metrics (Complete)
+### Config-Driven Operator Metrics
 
-Adding metrics for a new operator requires no code changes. Edit `config/operator-metrics.json` with your operator's fields and primitive types, redeploy, and the system handles:
+Adding metrics for a new operator requires no code changes. Edit `config/operator-metrics.json` with your operator's fields and primitive types, redeploy, and the system handles aggregation, derived metrics, display names, conversation enrichment, and API filtering automatically. See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design.
 
-- Metric aggregation (processor)
-- Derived metric computation (API)
-- Display names in Portuguese or any language (API)
-- Conversation list enrichment via `surfaceInList` flag (API)
-- `&metric=` filter support for all derived metrics (API)
+### API Gateway Authentication
 
-Built-in legacy metrics (timing, sentiment, quality from the `conversation-intelligence` operator) are still handled by hardcoded logic in the API. These will be migrated to config when those operators are onboarded.
-
-See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design and migration history.
-
-### API Gateway Authentication (Complete)
-
-Set `CIRL_AUTH=apikey` in your `.env` file to require an API key on all dashboard endpoints. The webhook endpoint stays open for Twilio.
+Set `CIRL_AUTH=apikey` to require an API key on all dashboard endpoints. The webhook endpoint stays open for Twilio.
 
 ```bash
-# After deploying with CIRL_AUTH=apikey, retrieve your key:
+# Retrieve your key after deploying:
 aws apigateway get-api-keys --name-query cirl-{env}-key --include-values --query "items[0].value" --output text
 ```
 
-Configure in Grafana: Infinity data source → Authentication → add custom header `x-api-key` with the key value.
+Configure in Grafana: Infinity data source → Authentication → add custom header `x-api-key` with the key value. With `CIRL_AUTH=none` (default), the API is open.
 
-With `CIRL_AUTH=none` (default), the API is open — suitable for local development and POCs.
+### Indexed Conversation Drill-Down
 
-### Hourly Aggregation Granularity (Planned)
-
-Metrics are currently aggregated per day. For customers who need intraday trends (e.g., peak hours, shift-level analysis), hourly aggregation will be added:
-
-- The processor writes to both `DAY#YYYYMMDD#METRIC#...` and `HOUR#YYYYMMDDHH#METRIC#...` keys
-- The API accepts a `granularity=day|hour` query parameter
-- Doubles DynamoDB write volume — negligible at low scale, relevant at 200K+ conversations/month
-- Backward compatible: defaults to `day`, existing dashboards unaffected
-
-### Duplicate Transcript Deduplication (Planned)
-
-Twilio Conversational Intelligence can emit multiple transcripts for the same call (e.g., from dual-channel recording). Currently, CIRL processes each transcript independently, which can double-count metrics.
-
-**Known limitation:** If the same call produces two transcripts, operator results and metrics are processed twice.
-
-**Planned fix:** Deduplicate by call SID (`CA...`) or conversation SID (`CH...`) at ingestion time:
-1. Ingest Lambda extracts `call_sid` from transcript's `channel.media_properties.reference_sids`
-2. Conditional put on a `TENANT#{tenantId}#SEEN_CALL#{callSid}` marker in DynamoDB
-3. If marker exists → skip processing (return 202 "already processed")
-4. If new → process normally
-
-This ensures only the first transcript per call is processed, regardless of how many transcripts Twilio emits.
-
-### Operator Field Indexing for Drill-Down Queries (Complete)
-
-Fields marked `surfaceInList: true` in `config/operator-metrics.json` are automatically indexed at ingestion time. The conversations endpoint supports filtering by any indexed field:
+Fields marked `surfaceInList: true` are automatically indexed at ingestion time. Filter conversations by any indexed field:
 
 ```bash
 GET /tenants/{id}/conversations?handoff_reason=LACK_OF_KNOWLEDGE
 GET /tenants/{id}/conversations?inferred_csat=1
-GET /tenants/{id}/conversations?handoff_reason=LACK_OF_COMPREHENSION&from=2026-04-16&to=2026-04-17
 ```
-
-Index records use denormalized DynamoDB keys (`PK: TENANT#...#IDX#{field}#{value}`) for O(1) lookups. Existing conversations without index records appear in the unfiltered list as before.
 
 See [docs/indexed-conversations-plan.md](docs/indexed-conversations-plan.md) for the full design.
 
