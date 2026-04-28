@@ -29,6 +29,8 @@ const indexClient = new DynamoDBClient({});
 const indexDocClient = DynamoDBDocumentClient.from(indexClient);
 const TABLE_NAME = process.env.TABLE_NAME!;
 
+const INDEX_TTL_DAYS = 180;
+
 /**
  * Aggregate metrics for an operator based on its config.
  * Also writes index records for fields marked surfaceInList.
@@ -46,10 +48,16 @@ export async function aggregateFromConfig(
 
   for (const metric of config.metrics) {
     const value = extractField(payload, metric);
-    await aggregateByType(tenantId, date, metric, value);
+    await aggregateByType(tenantId, date, metric, value, conversationId);
 
-    // Write index record for surfaceInList fields
-    if (metric.surfaceInList && value !== undefined && value !== null) {
+    // Write index record for scalar surfaceInList fields.
+    // category_array is handled inside aggregateCategoryArray (one record per primary item).
+    if (
+      metric.surfaceInList &&
+      metric.type !== 'category_array' &&
+      value !== undefined &&
+      value !== null
+    ) {
       await writeIndexRecord(tenantId, metric.field, String(value), conversationId, date);
     }
   }
@@ -83,7 +91,8 @@ async function aggregateByType(
   tenantId: string,
   date: string,
   metric: MetricDefinition,
-  value: unknown
+  value: unknown,
+  conversationId: string
 ): Promise<void> {
   switch (metric.type) {
     case 'boolean':
@@ -100,7 +109,7 @@ async function aggregateByType(
       await aggregateEnum(tenantId, date, metric, value);
       break;
     case 'category_array':
-      await aggregateCategoryArray(tenantId, date, metric, value);
+      await aggregateCategoryArray(tenantId, date, metric, value, conversationId);
       break;
   }
 }
@@ -190,9 +199,12 @@ async function aggregateCategoryArray(
   tenantId: string,
   date: string,
   metric: CategoryArrayMetric,
-  value: unknown
+  value: unknown,
+  conversationId: string
 ): Promise<void> {
   if (!Array.isArray(value)) return;
+
+  const seenCategories = new Set<string>();
 
   for (const item of value) {
     if (typeof item !== 'object' || item === null) continue;
@@ -205,12 +217,27 @@ async function aggregateCategoryArray(
     const normalizedCategory = category.toLowerCase().replace(/\s+/g, '_');
     await incrementMetric(tenantId, date, `${metric.metricPrefix}_${normalizedCategory}`, 1);
 
+    // Index by primary category (deduped — one conversation can carry the same
+    // category multiple times via different subcategories).
+    if (metric.surfaceInList && !seenCategories.has(normalizedCategory)) {
+      seenCategories.add(normalizedCategory);
+      await writeIndexRecord(tenantId, metric.categoryField, category, conversationId, date);
+    }
+
     // Combined category + subcategory metric
     if (metric.subcategoryField && metric.subcategoryPrefix) {
       const subcategory = record[metric.subcategoryField] as string;
       if (subcategory && typeof subcategory === 'string') {
         const normalizedCombined = `${category} - ${subcategory}`.toLowerCase().replace(/\s+/g, '_');
         await incrementMetric(tenantId, date, `${metric.subcategoryPrefix}_${normalizedCombined}`, 1);
+
+        // Combined index record (primary + subtopic) for paired drill-down.
+        // Field name is the subcategoryField so the API can resolve
+        // `?primary_topic=X&subtopic=Y` by synthesizing the same value.
+        if (metric.surfaceInList) {
+          const comboValue = `${category}__${subcategory}`;
+          await writeIndexRecord(tenantId, metric.subcategoryField, comboValue, conversationId, date);
+        }
       }
     }
   }
@@ -231,6 +258,7 @@ async function writeIndexRecord(
   timestamp: string
 ): Promise<void> {
   const normalizedValue = fieldValue.toLowerCase().replace(/\s+/g, '_');
+  const ttl = Math.floor(Date.now() / 1000) + INDEX_TTL_DAYS * 86400;
 
   await indexDocClient.send(new PutCommand({
     TableName: TABLE_NAME,
@@ -242,6 +270,7 @@ async function writeIndexRecord(
       fieldName,
       fieldValue: normalizedValue,
       entityType: 'INDEX',
+      ttl,
     },
   }));
 }

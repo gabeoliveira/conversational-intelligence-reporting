@@ -36,7 +36,7 @@
           "categoryField": "primary_topic",
           "subcategoryField": "subtopic",
           "subcategoryPrefix": "poc_subtopic",
-          "surfaceInList": false
+          "surfaceInList": true
         },
         {
           "field": "back_to_ivr",

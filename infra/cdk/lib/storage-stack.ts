@@ -73,6 +73,7 @@ export class StorageStack extends cdk.Stack {
       encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
       encryptionKey: this.encryptionKey,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'ttl',
       removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 

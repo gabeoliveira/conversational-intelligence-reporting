@@ -18,6 +18,8 @@ jest.mock('@cirl/shared', () => ({
   configFriendlyMetricName: jest.fn().mockImplementation((name: string) => name),
   computeConfigDerivedMetrics: jest.fn().mockReturnValue([]),
   getListSurfaceFields: jest.fn().mockReturnValue({}),
+  getFilterableFieldNames: jest.fn().mockReturnValue([]),
+  getCategoryArrayPairs: jest.fn().mockReturnValue([]),
 }));
 
 process.env.TABLE_NAME = 'cirl-test';

@@ -409,5 +409,216 @@ describe('aggregation-engine', () => {
       );
       expect(putCalls).toHaveLength(0);
     });
+
+    it('writes one index record per primary category for category_array', async () => {
+      const configWithArray: OperatorConfig = {
+        operatorName: 'TopicOp',
+        displayName: 'Topic',
+        metrics: [
+          {
+            field: 'topics',
+            type: 'category_array',
+            metricPrefix: 'tp_topic',
+            displayName: 'Topic',
+            categoryField: 'primary_topic',
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithArray);
+
+      await aggregateFromConfig('t', '20260127', 'TopicOp', 'GT-A', {
+        topics: [
+          { primary_topic: 'RENDA FIXA' },
+          { primary_topic: 'POUPANCA' },
+        ],
+      });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(2);
+
+      const pks = putCalls.map((c: any[]) => c[0].input.Item.PK);
+      expect(pks).toContain('TENANT#t#IDX#primary_topic#renda_fixa');
+      expect(pks).toContain('TENANT#t#IDX#primary_topic#poupanca');
+
+      const fieldNames = new Set(putCalls.map((c: any[]) => c[0].input.Item.fieldName));
+      expect(fieldNames).toEqual(new Set(['primary_topic']));
+    });
+
+    it('writes combined primary+subtopic index records when both fields present', async () => {
+      const configWithArray: OperatorConfig = {
+        operatorName: 'TopicOp',
+        displayName: 'Topic',
+        metrics: [
+          {
+            field: 'topics',
+            type: 'category_array',
+            metricPrefix: 'tp_topic',
+            displayName: 'Topic',
+            categoryField: 'primary_topic',
+            subcategoryField: 'subtopic',
+            subcategoryPrefix: 'tp_subtopic',
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithArray);
+
+      await aggregateFromConfig('t', '20260127', 'TopicOp', 'GT-AB', {
+        topics: [
+          { primary_topic: 'RENDA FIXA', subtopic: 'RESGATE' },
+          { primary_topic: 'POUPANCA', subtopic: 'RENTABILIDADE' },
+        ],
+      });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      // 2 primary + 2 combined = 4
+      expect(putCalls).toHaveLength(4);
+
+      const pks = putCalls.map((c: any[]) => c[0].input.Item.PK);
+      expect(pks).toContain('TENANT#t#IDX#primary_topic#renda_fixa');
+      expect(pks).toContain('TENANT#t#IDX#primary_topic#poupanca');
+      expect(pks).toContain('TENANT#t#IDX#subtopic#renda_fixa__resgate');
+      expect(pks).toContain('TENANT#t#IDX#subtopic#poupanca__rentabilidade');
+    });
+
+    it('skips combined index when subtopic missing on an item', async () => {
+      const configWithArray: OperatorConfig = {
+        operatorName: 'TopicOp',
+        displayName: 'Topic',
+        metrics: [
+          {
+            field: 'topics',
+            type: 'category_array',
+            metricPrefix: 'tp_topic',
+            displayName: 'Topic',
+            categoryField: 'primary_topic',
+            subcategoryField: 'subtopic',
+            subcategoryPrefix: 'tp_subtopic',
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithArray);
+
+      await aggregateFromConfig('t', '20260127', 'TopicOp', 'GT-NOSUB', {
+        topics: [{ primary_topic: 'RENDA FIXA' }],
+      });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      // primary only, no combined
+      expect(putCalls).toHaveLength(1);
+      expect(putCalls[0][0].input.Item.PK).toBe('TENANT#t#IDX#primary_topic#renda_fixa');
+    });
+
+    it('dedupes index records when same primary category appears multiple times', async () => {
+      const configWithArray: OperatorConfig = {
+        operatorName: 'TopicOp',
+        displayName: 'Topic',
+        metrics: [
+          {
+            field: 'topics',
+            type: 'category_array',
+            metricPrefix: 'tp_topic',
+            displayName: 'Topic',
+            categoryField: 'primary_topic',
+            subcategoryField: 'subtopic',
+            subcategoryPrefix: 'tp_subtopic',
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithArray);
+
+      await aggregateFromConfig('t', '20260127', 'TopicOp', 'GT-B', {
+        topics: [
+          { primary_topic: 'RENDA FIXA', subtopic: 'RESGATE' },
+          { primary_topic: 'RENDA FIXA', subtopic: 'APLICACAO' },
+        ],
+      });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      // Primary deduped (1) + 2 distinct combined records
+      expect(putCalls).toHaveLength(3);
+
+      const primaryPks = putCalls
+        .filter((c: any[]) => c[0].input.Item.fieldName === 'primary_topic')
+        .map((c: any[]) => c[0].input.Item.PK);
+      expect(primaryPks).toEqual(['TENANT#t#IDX#primary_topic#renda_fixa']);
+
+      const subPks = putCalls
+        .filter((c: any[]) => c[0].input.Item.fieldName === 'subtopic')
+        .map((c: any[]) => c[0].input.Item.PK);
+      expect(subPks).toContain('TENANT#t#IDX#subtopic#renda_fixa__resgate');
+      expect(subPks).toContain('TENANT#t#IDX#subtopic#renda_fixa__aplicacao');
+    });
+
+    it('does not write category_array index when surfaceInList is false', async () => {
+      const configNoSurface: OperatorConfig = {
+        operatorName: 'TopicOp',
+        displayName: 'Topic',
+        metrics: [
+          {
+            field: 'topics',
+            type: 'category_array',
+            metricPrefix: 'tp_topic',
+            displayName: 'Topic',
+            categoryField: 'primary_topic',
+            surfaceInList: false,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configNoSurface);
+
+      await aggregateFromConfig('t', '20260127', 'TopicOp', 'GT-C', {
+        topics: [{ primary_topic: 'RENDA FIXA' }],
+      });
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(0);
+    });
+
+    it('sets ttl on every index record', async () => {
+      const configWithSurface: OperatorConfig = {
+        operatorName: 'TtlOp',
+        displayName: 'Ttl',
+        metrics: [
+          {
+            field: 'status',
+            type: 'enum',
+            metricPrefix: 'ttl_status',
+            displayName: 'Status',
+            values: ['ACTIVE'],
+            surfaceInList: true,
+          },
+        ],
+      };
+      mockGetOperatorConfig.mockReturnValue(configWithSurface);
+
+      const before = Math.floor(Date.now() / 1000);
+      await aggregateFromConfig('t', '20260127', 'TtlOp', 'GT-T', { status: 'ACTIVE' });
+      const after = Math.floor(Date.now() / 1000);
+
+      const putCalls = mockDocSend.mock.calls.filter(
+        (c: any[]) => c[0].input?.Item?.entityType === 'INDEX'
+      );
+      expect(putCalls).toHaveLength(1);
+      const ttl = putCalls[0][0].input.Item.ttl;
+      // TTL should be ~180 days from now (allow ±2s drift)
+      const expectedMin = before + 180 * 86400;
+      const expectedMax = after + 180 * 86400;
+      expect(ttl).toBeGreaterThanOrEqual(expectedMin);
+      expect(ttl).toBeLessThanOrEqual(expectedMax);
+    });
   });
 });

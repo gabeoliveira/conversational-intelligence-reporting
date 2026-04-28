@@ -4,7 +4,12 @@ import {
   QueryCommand,
   QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { ensureConfigLoaded, getListSurfaceFields } from '@cirl/shared';
+import {
+  ensureConfigLoaded,
+  getListSurfaceFields,
+  getFilterableFieldNames,
+  getCategoryArrayPairs,
+} from '@cirl/shared';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -27,9 +32,11 @@ export async function listConversations(
 ): Promise<{ items: unknown[]; nextToken?: string }> {
   // Load config and check for indexed field filters
   await ensureConfigLoaded();
-  const surfaceFields = getListSurfaceFields();
-  const allSurfaceFieldNames = Object.values(surfaceFields).flat();
-  const indexFilter = findIndexFilter(params, allSurfaceFieldNames);
+  const indexFilter = findIndexFilter(
+    params,
+    getFilterableFieldNames(),
+    getCategoryArrayPairs()
+  );
 
   if (indexFilter) {
     return queryByIndex(tenantId, indexFilter, params);
@@ -295,12 +302,26 @@ async function enrichWithOperatorFields(
 
 /**
  * Check if any query parameter matches a surfaceInList field.
+ * For category_array pairs, both primary + sub keys must be present;
+ * the resolved filter then targets the combined index.
  * Returns the first match, or null if none.
  */
 function findIndexFilter(
   params: Record<string, string | undefined>,
-  surfaceFieldNames: string[]
+  surfaceFieldNames: string[],
+  pairs: Array<{ primaryKey: string; subKey: string }>
 ): { fieldName: string; fieldValue: string } | null {
+  // Paired filters take precedence — narrower index, fewer post-filter results.
+  for (const pair of pairs) {
+    const primaryVal = params[pair.primaryKey];
+    const subVal = params[pair.subKey];
+    if (primaryVal && subVal) {
+      return {
+        fieldName: pair.subKey,
+        fieldValue: `${primaryVal}__${subVal}`,
+      };
+    }
+  }
   for (const field of surfaceFieldNames) {
     if (params[field]) {
       return { fieldName: field, fieldValue: params[field]! };

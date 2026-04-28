@@ -96,6 +96,45 @@ export function getListSurfaceFields(): Record<string, string[]> {
 }
 
 /**
+ * Names of query params that resolve to an index lookup on the conversations API.
+ * For scalar primitives this is the metric's `field`. For category_array, it's
+ * the `categoryField` (e.g. `primary_topic` rather than `topics`), since the
+ * index records are keyed per primary category.
+ */
+export function getFilterableFieldNames(): string[] {
+  const result: string[] = [];
+  for (const op of getAllOperatorConfigs()) {
+    for (const m of op.metrics) {
+      if (!m.surfaceInList) continue;
+      if (m.type === 'category_array') {
+        result.push(m.categoryField);
+      } else {
+        result.push(m.field);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Filterable category_array pairs (primary + subcategory). When both query
+ * params are present the API resolves them against the combined index keyed
+ * by `subcategoryField`, value `${primary}__${subcategory}`.
+ */
+export function getCategoryArrayPairs(): Array<{ primaryKey: string; subKey: string }> {
+  const result: Array<{ primaryKey: string; subKey: string }> = [];
+  for (const op of getAllOperatorConfigs()) {
+    for (const m of op.metrics) {
+      if (m.type !== 'category_array') continue;
+      if (!m.surfaceInList) continue;
+      if (!m.subcategoryField) continue;
+      result.push({ primaryKey: m.categoryField, subKey: m.subcategoryField });
+    }
+  }
+  return result;
+}
+
+/**
  * Reset the cached config. Useful for testing.
  */
 export function resetConfigCache(): void {
