@@ -261,11 +261,9 @@ No tests exist yet. Jest is configured in all three services. Here's what to wri
 
 **`metrics.test.ts`** — Mock DynamoDB query results.
 - Returns raw metrics from DynamoDB
-- Computes sentiment_avg from sum/count
-- Computes avg_handling_time_sec from sum/count
-- Computes avg_response_time_sec from sum/count
-- Computes avg_customer_wait_time_sec from sum/count
-- Computes transfer_rate_percent from transfers/conversation_count
+- Computes built-in averages from sum/count (`avg_handling_time_sec`, `avg_response_time_sec`, `avg_customer_wait_time_sec`)
+- Computes config-driven derived metrics — `_rate_percent` from `_count`/`_total` (boolean), `_avg` from `_sum`/`_count` (integer), `_<value>_rate_percent` from `_<value>`/`_total` (enum)
+- Computes legacy `conversation-intelligence` derivations (`sentiment_avg`, `transfer_rate_percent`, etc.) when those raw counters are present
 - Filters by specific metric name
 - Default date range = last 30 days
 - Custom from/to date range

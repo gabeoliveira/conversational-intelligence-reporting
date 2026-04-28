@@ -153,13 +153,11 @@ s3://cirl-aggregated-{env}-{account}-{region}/
 - Partitioned by: `tenant_id`, `year`, `month`
 
 **Metrics computed**:
-- `conversation_count` - Total conversations per day
-- `operator_{name}_count` - Operator execution counts
-- `sentiment_*` - Sentiment aggregates (sum, count, avg)
-- `intent_*` - Intent classification metrics
-- `quality_*` - Quality scores (virtual/human agent)
-- `transfer_rate_percent` - Transfer rates
-- See [Metrics Catalog](./05-metrics-catalog.md) for complete list
+- `conversation_count` — total conversations per day
+- `operator_<Name>_count` — execution counts per Twilio operator
+- Timing aggregates: `*_sum`, `*_count`, `avg_*_sec` for handling/response/customer-wait times
+- Per-operator metrics auto-derived from [`config/operator-metrics.json`](../config/operator-metrics.json) — names follow `<metricPrefix>_<suffix>` per primitive type (`_rate_percent`, `_avg`, `_<value>`, etc.)
+- See [`bi-integration.md` → Metrics Catalog](./bi-integration.md#metrics-catalog) for the naming rules and live discovery
 
 **Characteristics**:
 - Pre-aggregated for fast queries
@@ -279,54 +277,7 @@ S3 Curated (Silver)
 
 ## Athena Queries
 
-### Query Curated Conversations
-
-```sql
-SELECT
-  conversation_id,
-  customer_key,
-  channel,
-  agent_id,
-  started_at
-FROM cirl_demo.lakehouse_conversations
-WHERE tenant_id = 'demo'
-  AND year = '2026'
-  AND month = '01'
-  AND day >= '20'
-ORDER BY started_at DESC
-LIMIT 100;
-```
-
-### Query Aggregated Metrics
-
-```sql
-SELECT
-  date,
-  metric_name,
-  value
-FROM cirl_demo.lakehouse_metrics
-WHERE tenant_id = 'demo'
-  AND year = '2026'
-  AND month = '01'
-  AND metric_name LIKE 'sentiment_%'
-ORDER BY date, metric_name;
-```
-
-### Time-Series Analysis
-
-```sql
-SELECT
-  date,
-  SUM(CASE WHEN metric_name = 'conversation_count' THEN value ELSE 0 END) AS conversations,
-  AVG(CASE WHEN metric_name = 'sentiment_avg' THEN value ELSE NULL END) AS avg_sentiment,
-  AVG(CASE WHEN metric_name = 'transfer_rate_percent' THEN value ELSE NULL END) AS transfer_rate
-FROM cirl_demo.lakehouse_metrics
-WHERE tenant_id = 'demo'
-  AND year = '2026'
-  AND month = '01'
-GROUP BY date
-ORDER BY date;
-```
+See [`athena-cookbook.md`](./athena-cookbook.md) for working query examples and the schema reference for `lakehouse_conversations`, `lakehouse_operator_results`, and `lakehouse_metrics`.
 
 ## Cost Optimization
 

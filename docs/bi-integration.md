@@ -83,6 +83,8 @@ See [`grafana-poc-dashboard.json`](../dashboards/grafana-poc-dashboard.json) for
 
 Requires `CIRL_ANALYTICS=simple` or `CIRL_ANALYTICS=lakehouse`.
 
+> For SQL examples, schema reference, and a query cookbook, see [`athena-cookbook.md`](./athena-cookbook.md). The per-tool sections below cover only the connection setup.
+
 ### Simple Mode vs. Lakehouse Mode
 
 **Simple** (`CIRL_ANALYTICS=simple`):
@@ -137,23 +139,7 @@ Requires `CIRL_ANALYTICS=simple` or `CIRL_ANALYTICS=lakehouse`.
 
 #### Step 4: Sample Queries
 
-**Simple Mode:**
-```sql
-SELECT tenantId, date, metricName,
-       json_extract_scalar(payload, '$.value') as value
-FROM "cirl_dynamo_demo"."default"."cirl-demo"
-WHERE PK = 'TENANT#demo#AGG#DAY'
-  AND entityType = 'AGGREGATE'
-```
-
-**Lakehouse Mode:**
-```sql
-SELECT date, metric_name, value
-FROM cirl_demo.lakehouse_metrics
-WHERE tenant_id = 'demo'
-  AND year = '2026' AND month = '01'
-ORDER BY date
-```
+See [`athena-cookbook.md`](./athena-cookbook.md) for working examples in both simple and lakehouse modes.
 
 ### Tableau Setup
 
@@ -233,85 +219,45 @@ Available when `CIRL_ANALYTICS=lakehouse`. All tables have clean, flat schemas.
 
 ## Metrics Catalog
 
-### Core Metrics
+CIRL emits two layers of metrics. Rather than maintain a hand-curated list here that drifts every time the config changes, this section describes how metric names are *derived* — the live list for any tenant is always one API call away.
+
+### Built-in Metrics (always present)
 
 | Metric Name | Type | Description |
-|-------------|------|-------------|
-| `conversation_count` | Counter | Total conversations processed |
-| `operator_{name}_count` | Counter | Per-operator execution count |
-
-### Timing Metrics (from Transcript Sentences)
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
+|---|---|---|
+| `conversation_count` | Counter | Total conversations per day |
+| `operator_<Name>_count` | Counter | Execution count per Twilio operator |
+| `agent_sentence_count` | Counter | Agent sentences (from transcript) |
+| `customer_sentence_count` | Counter | Customer sentences |
+| `sentence_count_total` | Counter | Total transcript sentences |
 | `handling_time_sum` / `_count` | Sum/Counter | For computing average |
 | `avg_handling_time_sec` | Computed | Average conversation duration (seconds) |
 | `response_time_sum` / `_count` | Sum/Counter | For computing average |
 | `avg_response_time_sec` | Computed | Average agent response time (seconds) |
 | `customer_wait_time_sum` / `_count` | Sum/Counter | For computing average |
 | `avg_customer_wait_time_sec` | Computed | Average customer wait time (seconds) |
-| `sentence_count_total` | Counter | Total transcript sentences |
-| `agent_sentence_count` | Counter | Agent sentences |
-| `customer_sentence_count` | Counter | Customer sentences |
 
-### Sentiment Metrics
+### Config-Driven Metrics
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `sentiment_positive` / `_negative` / `_neutral` | Counter | Count per sentiment |
-| `sentiment_score_sum` / `_count` | Sum/Counter | For averaging (0-100 scale) |
-| `sentiment_avg` | Computed | Average sentiment score (0-100) |
+Every metric defined in [`config/operator-metrics.json`](../config/operator-metrics.json) emits a fixed set of names auto-derived from its `metricPrefix`. The exact set depends on the primitive type:
 
-### Classification & Intent Metrics
+| Primitive | Emitted metrics |
+|---|---|
+| `boolean` | `<prefix>_count`, `<prefix>_total`, `<prefix>_rate_percent` |
+| `integer` | `<prefix>_count`, `<prefix>_sum`, `<prefix>_avg`, plus `<prefix>_<value>` if `distribution: true` |
+| `category` | `<prefix>_<value>` per distinct value |
+| `enum` | `<prefix>_<value>` per value, `<prefix>_total`, `<prefix>_<value>_rate_percent` |
+| `category_array` | `<prefix>_<primary>` per primary; if `subcategoryField` set, also `<subcategoryPrefix>_<primary>_-_<sub>` |
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `classification_{label}` | Counter | Count per classification label |
-| `classification_avg_confidence` | Computed | Average classification confidence |
-| `intent_{type}` | Counter | Count per intent type |
-| `intent_avg_confidence` | Computed | Average intent confidence (0-100) |
-| `resolution_{status}` | Counter | Count per resolution status |
+Example — the Inter POC's [Analytics operator config](../config/operator-metrics.json) defines `ai_retained` (boolean, prefix `poc_ai_retained`), `inferred_csat` (integer with `distribution: true`, prefix `poc_csat`), `handoff_reason` (enum, prefix `poc_handoff`), and `topics` (category_array, prefix `poc_topic`/`poc_subtopic`). Those alone produce ~20 metric names without any custom code.
 
-### Quality Metrics
+### Discovering Live Metrics
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `virtual_agent_quality_avg` | Computed | Average VA quality (0-10 scale) |
-| `human_agent_quality_avg` | Computed | Average human agent quality (0-10 scale) |
-| `transfer_rate_percent` | Computed | % of conversations transferred to human |
-| `virtual_agent_resolved_without_human_percent` | Computed | Auto-resolution rate |
+```http
+GET /tenants/<id>/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD
+```
 
-### AI Analytics Metrics (from Analytics Operator)
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `poc_ai_retention_rate_percent` | Computed | % resolved by AI without human |
-| `poc_csat_avg` | Computed | Average inferred CSAT (1-5) |
-| `poc_csat_{1-5}` | Counter | CSAT score distribution |
-| `poc_topic_{name}` | Counter | Count per primary topic |
-| `poc_subtopic_{primary_-_subtopic}` | Counter | Count per topic-subtopic combination |
-| `poc_error_rate_percent` | Computed | % with AI errors |
-| `poc_back_to_ivr_rate_percent` | Computed | % where customer returned to IVR |
-
-### Handoff Reason Metrics
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `poc_handoff_customer_request` | Counter | Conversations where customer requested human |
-| `poc_handoff_lack_of_comprehension` | Counter | Conversations where AI failed to understand |
-| `poc_handoff_lack_of_knowledge` | Counter | Conversations where AI lacked knowledge |
-| `poc_handoff_total` | Counter | Total conversations with any handoff |
-| `poc_handoff_customer_request_rate_percent` | Computed | % of all conversations (tracks AI acceptance) |
-| `poc_handoff_lack_of_comprehension_rate_percent` | Computed | % of all conversations (tracks AI quality) |
-| `poc_handoff_lack_of_knowledge_rate_percent` | Computed | % of all conversations (tracks knowledge base quality) |
-
-### PII & Summary Metrics
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `pii_entities_detected` | Counter | Total PII entities found |
-| `pii_avg_entities_per_conversation` | Computed | Average PII per conversation |
-| `summary_avg_words` | Computed | Average summary length |
+Each result has a `metricName` (internal) and `displayName` (friendly, derived from the config's `displayName` field). Period-level rates also appear with `date: "period"` for stat panels — see the next section.
 
 ---
 

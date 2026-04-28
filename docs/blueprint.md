@@ -315,7 +315,7 @@ POST /webhook/ci
 ```
 GET  /tenants/{tenantId}/conversations?from=&to=&agentId=&queueId=&customerKey=
 GET  /tenants/{tenantId}/conversations/{conversationId}
-GET  /tenants/{tenantId}/metrics?from=&to=&metric=sentiment_avg|...
+GET  /tenants/{tenantId}/metrics?from=&to=&metric=poc_csat_avg|...
 GET  /tenants/{tenantId}/schemas
 GET  /tenants/{tenantId}/schemas/{operatorName}/versions/{version}
 ```
@@ -413,27 +413,7 @@ Use case: Operator-specific analysis, drill-down into results
 
 ### Sample Queries
 
-**Daily sentiment trend:**
-```sql
-SELECT date, AVG(value) as avg_sentiment
-FROM cirl_demo.lakehouse_metrics
-WHERE tenant_id = 'your-tenant'
-  AND metric_name = 'sentiment_avg'
-  AND year = '2026' AND month = '01'
-GROUP BY date
-ORDER BY date
-```
-
-**Top agents by conversation volume:**
-```sql
-SELECT agent_id, COUNT(*) as conversation_count
-FROM cirl_demo.lakehouse_conversations
-WHERE tenant_id = 'your-tenant'
-  AND year = '2026'
-GROUP BY agent_id
-ORDER BY conversation_count DESC
-LIMIT 10
-```
+See [`athena-cookbook.md`](./athena-cookbook.md) for the schema reference and a set of working query examples (per-day metrics, CSAT trend, handoff breakdown, top topics, conversation drill-down) against the current config-driven metric set.
 
 ---
 

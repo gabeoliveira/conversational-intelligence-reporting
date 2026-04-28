@@ -20,8 +20,8 @@
           "displayName": "Transbordo",
           "values": ["NONE", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"],
           "valueDisplayNames": {
-            "CUSTOMER_REQUEST": "Solicitacao do Cliente",
-            "LACK_OF_COMPREHENSION": "Falta de Compreensao",
+            "CUSTOMER_REQUEST": "Solicitação do Cliente",
+            "LACK_OF_COMPREHENSION": "Falta de Compreensão",
             "LACK_OF_KNOWLEDGE": "Falta de Conhecimento"
           },
           "ignoreValues": ["NONE"],
@@ -107,7 +107,7 @@
           "field": "desambiguador",
           "type": "boolean",
           "metricPrefix": "kpi_desambiguador",
-          "displayName": "Taxa de Desambiguacao",
+          "displayName": "Taxa de Desambiguação",
           "surfaceInList": false
         }
       ]

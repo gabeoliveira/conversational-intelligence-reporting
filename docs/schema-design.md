@@ -135,9 +135,11 @@ This operator analyzes AI virtual agent performance, conversation topics, handof
 
 ## Metrics Tracked
 
+> **Heads-up — historical example.** The metric list below describes one possible operator schema (the legacy bundled `conversation-intelligence` operator). It is kept as a worked example, but **production tenants today emit metrics defined by [`config/operator-metrics.json`](../config/operator-metrics.json)** — see [README.md → Available Metrics](../README.md#get-metrics) and [`bi-integration.md` → Metrics Catalog](./bi-integration.md#metrics-catalog) for the live, config-driven naming rules. Names like `sentiment_avg` and `transfer_rate_percent` only appear if a tenant actually uses the `conversation-intelligence` schema and the operator emits those fields.
+
 ### For `conversation-intelligence` Operator
 
-The system automatically tracks these metrics:
+When this schema is in use, the system automatically tracks these metrics:
 
 **Sentiment Metrics:**
 - `sentiment_positive`, `sentiment_negative`, `sentiment_neutral` - Count per sentiment

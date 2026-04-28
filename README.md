@@ -234,57 +234,37 @@ Response:
 ```json
 {
   "metrics": [
-    { "date": "2026-01-27T00:00:00Z", "metricName": "conversation_count", "value": 42 },
-    { "date": "2026-01-27T00:00:00Z", "metricName": "operator_pii-detect_count", "value": 15 },
-    { "date": "2026-01-27T00:00:00Z", "metricName": "sentiment_avg", "value": 7.5 }
+    { "date": "2026-04-28T00:00:00Z", "metricName": "conversation_count", "value": 42, "displayName": "Conversas" },
+    { "date": "2026-04-28T00:00:00Z", "metricName": "poc_csat_avg", "value": 4.2, "displayName": "CSAT Média" },
+    { "date": "period",                "metricName": "poc_handoff_lack_of_comprehension_rate_percent", "value": 12.5, "displayName": "Transbordo: Falta de Compreensao (%)" }
   ],
-  "period": { "from": "2026-01-20", "to": "2026-01-27" }
+  "period": { "from": "2026-04-22", "to": "2026-04-28" }
 }
 ```
 
 **Available Metrics:**
 
-*Core:*
-- `conversation_count` - Total conversations
-- `operator_{name}_count` - Per-operator execution count
+CIRL emits two layers of metrics, both queryable through the same API:
 
-*Timing (from transcript sentences):*
-- `avg_handling_time_sec` - Average conversation duration (seconds)
-- `avg_response_time_sec` - Average time for agent to respond after customer finishes (seconds)
-- `avg_customer_wait_time_sec` - Average time for customer to respond after agent finishes (seconds)
+*Built-in (always present):*
+- `conversation_count` — total conversations per day
+- `operator_<Name>_count` — execution count per Twilio operator
+- Timing: `avg_handling_time_sec`, `avg_response_time_sec`, `avg_customer_wait_time_sec` (with `_sum`/`_count` raw counterparts)
+- Sentence counts: `agent_sentence_count`, `customer_sentence_count`, `sentence_count_total`
 
-*Sentiment & Classification:*
-- `sentiment_avg` - Average sentiment score (0-100 scale)
-- `intent_avg_confidence` - Average intent confidence (0-100 scale)
-- `classification_avg_confidence` - Average classification confidence
-- `summary_avg_words` - Average summary length
+*Config-driven (one set per operator output field defined in [`config/operator-metrics.json`](config/operator-metrics.json)):*
 
-*PII:*
-- `pii_entities_detected` - Total PII entities found
-- `pii_avg_entities_per_conversation` - Average PII per conversation
+Auto-derived from each metric's `metricPrefix`:
 
-*Agent Quality:*
-- `virtual_agent_quality_avg` - Average virtual agent quality (0-10 scale)
-- `human_agent_quality_avg` - Average human agent quality (0-10 scale)
-- `transfer_rate_percent` - Percentage of conversations transferred to human
-- `virtual_agent_resolved_without_human_percent` - Auto-resolution rate
-- `human_agent_resolved_problem_percent` - Human agent success rate
+| Primitive | Emitted metrics |
+|---|---|
+| `boolean` | `_count`, `_total`, `_rate_percent` |
+| `integer` | `_count`, `_sum`, `_avg`, plus `_<value>` if `distribution: true` |
+| `category` | `_<value>` per distinct value |
+| `enum` | `_<value>` per value, `_total`, `_<value>_rate_percent` |
+| `category_array` | `_<value>` per primary; if `subcategoryField` set, also `_<subcategoryPrefix>_<primary>_-_<sub>` |
 
-*AI Analytics (from Analytics operator):*
-- `poc_ai_retention_rate_percent` - Percentage of conversations resolved by AI without human transfer
-- `poc_csat_avg` - Average inferred customer satisfaction (1-5 scale)
-- `poc_error_rate_percent` - Percentage of conversations with AI errors (hallucinations, misconceptions)
-- `poc_back_to_ivr_rate_percent` - Percentage of conversations where customer returned to IVR
-- `poc_topic_{name}` - Conversation count per primary topic
-- `poc_subtopic_{primary_-_subtopic}` - Conversation count per topic-subtopic combination
-
-*Handoff Reasons:*
-- `poc_handoff_customer_request_rate_percent` - % of conversations where customer requested a human
-- `poc_handoff_lack_of_comprehension_rate_percent` - % where AI failed to understand the customer
-- `poc_handoff_lack_of_knowledge_rate_percent` - % where AI lacked knowledge to answer
-- `poc_handoff_total` - Total conversations with any handoff
-
-See [docs/bi-integration.md](docs/bi-integration.md) for full metrics catalog.
+To see the live list for your tenant: hit `GET /tenants/<id>/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD` and inspect the `metricName` and `displayName` on each result.
 
 #### List Schemas
 ```http
@@ -304,33 +284,7 @@ CIRL is BI-agnostic. SQL-based BI tools connect via Athena; API-based tools conn
 
 ### SQL-Based BI Tools (QuickSight, Tableau, PowerBI, Looker)
 
-How you query depends on your analytics mode:
-
-#### Simple Mode
-
-Athena queries DynamoDB directly via federated query. No ETL to manage.
-
-```sql
--- Connect to catalog: cirl_dynamo_{env}, database: default, table: cirl-{env}
-SELECT conversationId, tenantId, startedAt, payload
-FROM "cirl_dynamo_demo"."default"."cirl-demo"
-WHERE PK = 'TENANT#demo#CONV'
-  AND entityType = 'CONVERSATION'
-LIMIT 10
-```
-
-#### Lakehouse Mode
-
-Athena queries optimized S3 Parquet tables. Clean schemas, no PK/SK parsing.
-
-```sql
--- Connect to database: cirl_{env}
-SELECT conversation_id, customer_key, agent_id, started_at
-FROM cirl_demo.lakehouse_conversations
-WHERE tenant_id = 'demo'
-  AND year = '2026' AND month = '01'
-LIMIT 10
-```
+Connect via Athena. Simple mode federates over DynamoDB (real-time, higher per-query cost); lakehouse mode queries flat S3 Parquet tables (cheaper at scale, freshness depends on Glue ETL). See [docs/athena-cookbook.md](docs/athena-cookbook.md) for the schema reference and working query examples in both modes.
 
 ### REST API (Grafana, Metabase, Custom Dashboards)
 
@@ -340,8 +294,8 @@ Direct API access — works the same in both analytics modes.
 
 **Quick Example (QuickSight — Simple Mode):**
 1. In QuickSight, create new dataset → select **Athena**
-2. Workgroup: `cirl-demo`
-3. Catalog: `cirl_dynamo_demo`, Database: `default`, Table: `cirl-demo`
+2. Workgroup: `cirl-<env>`
+3. Catalog: `cirl_dynamo_<env>`, Database: `default`, Table: `cirl-<env>`
 4. Use Custom SQL to filter by entity type
 5. Build visualizations with drag-and-drop
 
