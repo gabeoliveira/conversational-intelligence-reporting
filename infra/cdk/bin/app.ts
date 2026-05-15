@@ -2,6 +2,7 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 import * as path from 'path';
 import { StorageStack } from '../lib/storage-stack';
 import { ApiStack } from '../lib/api-stack';
@@ -13,6 +14,18 @@ import { SimpleAnalyticsStack } from '../lib/simple-analytics-stack';
 // Falls back to .env if not set.
 const projectRoot = path.join(__dirname, '..', '..', '..');
 const envFilePath = process.env.DOTENV_CONFIG_PATH || path.join(projectRoot, '.env');
+
+// Hard fail if DOTENV_CONFIG_PATH was set but the file does not exist — dotenv
+// silently no-ops on missing files, which has previously masked deploys that
+// wiped Lambda env vars (e.g. running with $(pwd) from infra/cdk instead of
+// the repo root, so the path resolves to a non-existent file).
+if (process.env.DOTENV_CONFIG_PATH && !fs.existsSync(envFilePath)) {
+  throw new Error(
+    `DOTENV_CONFIG_PATH was set to "${envFilePath}" but the file does not exist. ` +
+    `Re-run the deploy from the repo root so $(pwd)/.env.<env> resolves correctly.`
+  );
+}
+
 dotenv.config({ path: envFilePath });
 
 const app = new cdk.App();
@@ -42,6 +55,19 @@ const authMode = (
 if (!['none', 'apikey'].includes(authMode)) {
   throw new Error(
     `Invalid CIRL_AUTH value: "${authMode}". Must be "none" or "apikey".`
+  );
+}
+
+// Twilio creds are required for any non-dev/test environment so the ingest
+// Lambda can fetch transcript details from the CI API. dev/test can omit them
+// (e.g. when SKIP_SIGNATURE_VALIDATION is set and no real webhooks fire).
+// Without this gate, a missing DOTENV_CONFIG_PATH silently deploys a Lambda
+// with no Twilio creds and every webhook fails with "Missing TWILIO_*".
+const isProtectedEnv = !['dev', 'test', 'local'].includes(env);
+if (isProtectedEnv && (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN)) {
+  throw new Error(
+    `TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set for env="${env}". ` +
+    `Loaded env file: "${envFilePath}". Verify that file exists and contains both keys.`
   );
 }
 

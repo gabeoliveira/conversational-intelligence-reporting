@@ -159,6 +159,10 @@ export class ApiStack extends cdk.Stack {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),
+      // Bound the blast radius: even an unauthenticated flood can't spawn more
+      // than 50 concurrent dashboard Lambdas, which caps Lambda + downstream
+      // DDB cost. Tune up if 3-user real load ever runs into 429s.
+      reservedConcurrentExecutions: 50,
       environment: commonEnv,
       logGroup: dashboardLogGroup,
       bundling: bundlingOptions,
@@ -175,8 +179,12 @@ export class ApiStack extends cdk.Stack {
       description: 'Conversational Intelligence Reporting Layer API',
       deployOptions: {
         stageName: 'v1',
-        throttlingBurstLimit: 100,
-        throttlingRateLimit: 50,
+        // Stage-level throttle applies whether or not API keys are required.
+        // Tightened for the open-API testing window — generous for 3 dashboard
+        // users (Grafana fires panel queries near-simultaneously, hence the
+        // burst headroom), and any sustained excess gets 429 Too Many Requests.
+        throttlingBurstLimit: 50,
+        throttlingRateLimit: 20,
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
