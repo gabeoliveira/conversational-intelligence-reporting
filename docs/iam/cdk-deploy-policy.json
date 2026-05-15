@@ -1,0 +1,55 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DeployViaCdkBootstrapRoles",
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": "arn:aws:iam::*:role/cdk-*"
+    },
+    {
+      "Sid": "CloudFormationVisibility",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStacks",
+        "cloudformation:ListStackResources"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PostDeployOperations",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:ListFunctions",
+        "lambda:InvokeFunction",
+        "lambda:UpdateFunctionConfiguration",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartLiveTail",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:GetItem",
+        "dynamodb:DescribeTable",
+        "dynamodb:ListTables",
+        "events:DescribeRule",
+        "events:ListRules",
+        "events:DescribeEventBus",
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:GetObject"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
