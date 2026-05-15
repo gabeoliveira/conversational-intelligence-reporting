@@ -56,6 +56,20 @@
           "surfaceInList": true
         },
         {
+          "field": "actual_csat",
+          "type": "enum",
+          "metricPrefix": "poc_actual_csat",
+          "displayName": "CSAT Real",
+          "values": ["YES", "NO", "NOT_ASKED"],
+          "valueDisplayNames": {
+            "YES": "Resolvido",
+            "NO": "Não Resolvido",
+            "NOT_ASKED": "Não Perguntado"
+          },
+          "rateDenominator": "conversation_count",
+          "surfaceInList": true
+        },
+        {
           "field": "errors",
           "type": "boolean",
           "metricPrefix": "poc_errors",

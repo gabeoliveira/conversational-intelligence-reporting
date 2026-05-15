@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "poc-analytics-v2",
-  "title": "POC Analytics Operator v2",
-  "description": "Custom operator for POC. Analyzes AI agent performance, topics/subtopics, and satisfaction. Twilio auto-sets all fields as required and additionalProperties to false.",
+  "$id": "poc-analytics-v3",
+  "title": "POC Analytics Operator v3",
+  "description": "Custom operator for POC. Analyzes AI agent performance, topics/subtopics, and satisfaction. Adds solved_confirmed (closure-confirmation) on top of v2. Twilio auto-sets all fields as required and additionalProperties to false.",
   "type": "object",
   "properties": {
     "ai_retained": {
@@ -347,6 +347,11 @@
     "csat_reasoning": {
       "type": "string",
       "description": "Brief explanation of why this CSAT score was inferred. Reference specific moments in the conversation that influenced the score (e.g., customer frustration, quick resolution, repeated issues)."
+    },
+    "actual_csat": {
+      "type": "string",
+      "description": "Outcome of the AI's end-of-conversation confirmation question (e.g., \"Did I resolve your inquiry?\"). YES if the customer confirmed positively (problem solved). NO if the customer said no or expressed unresolved dissatisfaction. NOT_ASKED if the AI did not ask the closure question — typically because the customer hung up early, was transferred to a human before closing, or the AI failed to prompt for confirmation. Distinct from inferred_csat (which is derived from overall sentiment); this captures the explicit yes/no response when asked.",
+      "enum": ["YES", "NO", "NOT_ASKED"]
     },
     "errors": {
       "type": "boolean",
