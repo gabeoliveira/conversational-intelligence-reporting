@@ -40,11 +40,30 @@ export async function fetchOperatorResults(transcriptSid: string): Promise<Twili
 /**
  * Fetch transcript details from Twilio CI API
  */
+/**
+ * Twilio's `transcript.channel` is an object describing the source of the
+ * media — its shape depends on the channel type. For voice (Recording or
+ * ConversationRelay) it includes `media_properties.source`,
+ * `media_properties.source_sid`, and `media_properties.reference_sids` (e.g.
+ * `call_sid`). For Conversations it carries the conversation_sid analogously.
+ */
+export interface TranscriptChannel {
+  type?: string;
+  media_properties?: {
+    source?: string;
+    source_sid?: string;
+    media_url?: string | null;
+    reference_sids?: Record<string, string>;
+  };
+  participants?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 export async function fetchTranscript(transcriptSid: string): Promise<{
   sid: string;
   serviceSid: string;
   accountSid: string;
-  channel: string;
+  channel: TranscriptChannel;
   customerKey?: string;
   dateCreated: Date;
   status: string;
@@ -59,7 +78,7 @@ export async function fetchTranscript(transcriptSid: string): Promise<{
     sid: transcript.sid,
     serviceSid: transcript.serviceSid,
     accountSid: transcript.accountSid,
-    channel: transcript.channel as string,
+    channel: transcript.channel as TranscriptChannel,
     customerKey: transcript.customerKey ?? undefined,
     dateCreated: transcript.dateCreated,
     status: transcript.status,

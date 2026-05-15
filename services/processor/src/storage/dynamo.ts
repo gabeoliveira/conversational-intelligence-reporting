@@ -40,6 +40,20 @@ export function formatDate(date: Date = new Date()): string {
   return date.toISOString().split('T')[0].replace(/-/g, '');
 }
 
+/**
+ * Mask a phone number, keeping the country/area code prefix and the last 4
+ * digits visible. E.g. "+5511976932682" → "+5511****2682". Short or unrecognized
+ * inputs are returned as-is when there's nothing meaningful to mask.
+ *
+ * Phone numbers are PII; the raw value is still available inside the spine's
+ * channel.participants[] payload for support tooling that genuinely needs it.
+ */
+function maskPhone(phone: string | null | undefined): string | null {
+  if (!phone || typeof phone !== 'string') return null;
+  if (phone.length <= 9) return phone;
+  return `${phone.slice(0, 5)}${'*'.repeat(phone.length - 9)}${phone.slice(-4)}`;
+}
+
 interface WriteConversationParams {
   tenantId: string;
   conversationId: string;
@@ -90,11 +104,36 @@ export async function writeConversation(params: WriteConversationParams): Promis
     // Item doesn't exist yet, that's fine
   }
 
+  // Promote upstream channel SIDs to top-level fields so support tooling can
+  // jump from a CIRL conversation to the underlying Twilio resource (Call,
+  // Conversation, Recording) without parsing nested JSON.
+  const channelObj =
+    typeof metadata.channel === 'object' && metadata.channel !== null
+      ? (metadata.channel as Record<string, unknown>)
+      : null;
+  const mediaProps =
+    (channelObj?.media_properties as Record<string, unknown> | undefined) ?? {};
+  const refSids =
+    (mediaProps.reference_sids as Record<string, string> | undefined) ?? {};
+  const participants =
+    (channelObj?.participants as Array<Record<string, unknown>> | undefined) ?? [];
+  const customerRaw = participants.find(
+    p => p.role === 'Customer'
+  )?.media_participant_id as string | undefined;
+
   // Build payload with entity-specific attributes (spine + payload pattern)
   const payload = {
     ...existingPayload,
     customerKey: metadata.customerKey || null,
     channel: metadata.channel || 'unknown',
+    sourceType: (mediaProps.source as string | undefined) ?? null,
+    sourceSid: (mediaProps.source_sid as string | undefined) ?? null,
+    callSid: refSids.call_sid ?? null,
+    conversationSid: refSids.conversation_sid ?? null,
+    referenceSids: refSids,
+    // Masked customer phone for safe surfacing in dashboards/BI. The raw value
+    // is still nested under channel.participants[] for tooling that needs it.
+    customerPhone: maskPhone(customerRaw),
     agentId: metadata.agentId || null,
     teamId: metadata.teamId || null,
     queueId: metadata.queueId || null,
