@@ -58,6 +58,12 @@ if (!['none', 'apikey'].includes(authMode)) {
   );
 }
 
+// Enrichment feature flag. When enabled, exposes POST /tenants/{id}/enrichment
+// and merges enrichment records into conversation responses (at write time and
+// read time). See docs/enrichment.md for the full design.
+const enrichmentEnabled =
+  (app.node.tryGetContext('enrichment') || process.env.CIRL_ENRICHMENT_ENABLED || 'false').toString().toLowerCase() === 'true';
+
 // Twilio creds are required for any non-dev/test environment so the ingest
 // Lambda can fetch transcript details from the CI API. dev/test can omit them
 // (e.g. when SKIP_SIGNATURE_VALIDATION is set and no real webhooks fire).
@@ -86,6 +92,7 @@ new ApiStack(app, `${stackPrefix}ApiStack`, {
   },
   envName: env,
   authMode,
+  enrichmentEnabled,
   rawBucket: storageStack.rawBucket,
   table: storageStack.table,
   eventBus: storageStack.eventBus,

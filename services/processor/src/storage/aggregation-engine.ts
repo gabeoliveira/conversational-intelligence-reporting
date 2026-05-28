@@ -22,14 +22,7 @@ import { getOperatorConfig } from '@cirl/shared';
 
 // Import incrementMetric from dynamo.ts — shared write function
 import { incrementMetric } from './dynamo';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-
-const indexClient = new DynamoDBClient({});
-const indexDocClient = DynamoDBDocumentClient.from(indexClient);
-const TABLE_NAME = process.env.TABLE_NAME!;
-
-const INDEX_TTL_DAYS = 180;
+import { writeIndexRecord } from './index-writer';
 
 /**
  * Aggregate metrics for an operator based on its config.
@@ -243,34 +236,3 @@ async function aggregateCategoryArray(
   }
 }
 
-/**
- * Write a denormalized index record for drill-down queries.
- * Enables O(1) lookup: "all conversations where fieldName = fieldValue"
- *
- * PK: TENANT#{tenantId}#IDX#{fieldName}#{normalizedValue}
- * SK: TS#{timestamp}#CONV#{conversationId}
- */
-async function writeIndexRecord(
-  tenantId: string,
-  fieldName: string,
-  fieldValue: string,
-  conversationId: string,
-  timestamp: string
-): Promise<void> {
-  const normalizedValue = fieldValue.toLowerCase().replace(/\s+/g, '_');
-  const ttl = Math.floor(Date.now() / 1000) + INDEX_TTL_DAYS * 86400;
-
-  await indexDocClient.send(new PutCommand({
-    TableName: TABLE_NAME,
-    Item: {
-      PK: `TENANT#${tenantId}#IDX#${fieldName}#${normalizedValue}`,
-      SK: `TS#${timestamp}#CONV#${conversationId}`,
-      tenantId,
-      conversationId,
-      fieldName,
-      fieldValue: normalizedValue,
-      entityType: 'INDEX',
-      ttl,
-    },
-  }));
-}

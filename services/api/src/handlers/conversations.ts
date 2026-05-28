@@ -3,6 +3,7 @@ import {
   DynamoDBDocumentClient,
   QueryCommand,
   QueryCommandInput,
+  BatchGetCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   ensureConfigLoaded,
@@ -14,6 +15,28 @@ import {
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.TABLE_NAME!;
+
+// Filterable spine fields that aren't driven by operator-metrics.json. Anything
+// here is recognized as a query-string filter on /conversations and resolves
+// to an O(1) lookup against the corresponding index record written by the
+// processor.
+const BUILTIN_FILTERABLE_FIELDS = ['customer_phone_last4'];
+
+// Enrichment fields opted in via CIRL_ENRICHMENT_FILTERABLE_FIELDS env var
+// (comma-separated). Processor writes inverse indexes for these at
+// writeConversation time. See docs/enrichment.md.
+const ENRICHMENT_FILTERABLE_FIELDS = (process.env.CIRL_ENRICHMENT_FILTERABLE_FIELDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function allFilterableFieldNames(): string[] {
+  return [
+    ...getFilterableFieldNames(),
+    ...BUILTIN_FILTERABLE_FIELDS,
+    ...ENRICHMENT_FILTERABLE_FIELDS,
+  ];
+}
 
 interface ListConversationsParams {
   from?: string;
@@ -34,7 +57,7 @@ export async function listConversations(
   await ensureConfigLoaded();
   const indexFilter = findIndexFilter(
     params,
-    getFilterableFieldNames(),
+    allFilterableFieldNames(),
     getCategoryArrayPairs()
   );
 
@@ -133,12 +156,14 @@ export async function listConversations(
       tenantId: item.tenantId as string,
       customerKey: payload.customerKey,
       customerPhone: payload.customerPhone ?? null,
+      customerPhoneLast4: payload.customerPhoneLast4 ?? null,
       channel: payload.channel,
       sourceType: payload.sourceType ?? null,
       sourceSid: payload.sourceSid ?? null,
       callSid: payload.callSid ?? null,
       conversationSid: payload.conversationSid ?? null,
       referenceSids: payload.referenceSids ?? {},
+      enrichment: payload.enrichment ?? null,
       agentId: payload.agentId,
       teamId: payload.teamId,
       queueId: payload.queueId,
@@ -153,9 +178,12 @@ export async function listConversations(
   // ensureConfigLoaded already called at top of function
   const fieldsConfig = getListSurfaceFields();
   const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
-  const items = hasOperatorFields
+  const enrichedItems = hasOperatorFields
     ? await enrichWithOperatorFields(tenantId, baseItems, fieldsConfig)
     : baseItems;
+
+  // Late-arrival enrichment merge — no-op when feature flag is off.
+  const items = await mergeEnrichment(tenantId, enrichedItems);
 
   const response: { items: unknown[]; nextToken?: string } = { items };
 
@@ -221,32 +249,131 @@ export async function getConversation(
   // Parse conversation payload
   const conversationPayload = conversation.payload ? JSON.parse(conversation.payload as string) : {};
 
+  const conversationRow: Record<string, unknown> = {
+    conversationId: conversation.conversationId,
+    tenantId: conversation.tenantId,
+    customerKey: conversationPayload.customerKey,
+    customerPhone: conversationPayload.customerPhone ?? null,
+    customerPhoneLast4: conversationPayload.customerPhoneLast4 ?? null,
+    channel: conversationPayload.channel,
+    sourceType: conversationPayload.sourceType ?? null,
+    sourceSid: conversationPayload.sourceSid ?? null,
+    callSid: conversationPayload.callSid ?? null,
+    conversationSid: conversationPayload.conversationSid ?? null,
+    referenceSids: conversationPayload.referenceSids ?? {},
+    enrichment: conversationPayload.enrichment ?? null,
+    agentId: conversationPayload.agentId,
+    teamId: conversationPayload.teamId,
+    queueId: conversationPayload.queueId,
+    startedAt: conversation.startedAt,
+    operatorCount: conversationPayload.operatorCount,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+  };
+
+  // Late-arrival enrichment merge for the single-record path.
+  const [merged] = await mergeEnrichment(conversation.tenantId as string, [conversationRow]);
+
   return {
-    conversation: {
-      conversationId: conversation.conversationId,
-      tenantId: conversation.tenantId,
-      customerKey: conversationPayload.customerKey,
-      customerPhone: conversationPayload.customerPhone ?? null,
-      channel: conversationPayload.channel,
-      sourceType: conversationPayload.sourceType ?? null,
-      sourceSid: conversationPayload.sourceSid ?? null,
-      callSid: conversationPayload.callSid ?? null,
-      conversationSid: conversationPayload.conversationSid ?? null,
-      referenceSids: conversationPayload.referenceSids ?? {},
-      agentId: conversationPayload.agentId,
-      teamId: conversationPayload.teamId,
-      queueId: conversationPayload.queueId,
-      startedAt: conversation.startedAt,
-      operatorCount: conversationPayload.operatorCount,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
-    },
+    conversation: merged,
     operators,
   };
 }
 
 function formatTimestamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, '').replace('T', '').split('.')[0];
+}
+
+/**
+ * Late-arrival enrichment merge for conversation responses.
+ *
+ * Even when write-time merge runs in the processor, an enrichment record can
+ * arrive *after* the spine has been written (Studio retries, slow upstream
+ * systems, manual backfill). The API does a second-pass BatchGet on enrichment
+ * records keyed by each row's callSid/conversationSid and merges the result
+ * into the response. See docs/enrichment.md.
+ *
+ * No-ops when the feature flag is off so deployments that don't use enrichment
+ * pay zero overhead.
+ */
+async function mergeEnrichment(
+  tenantId: string,
+  conversations: Array<Record<string, unknown>>
+): Promise<Array<Record<string, unknown>>> {
+  if (process.env.CIRL_ENRICHMENT_ENABLED !== 'true') return conversations;
+  if (conversations.length === 0) return conversations;
+
+  // Build the BatchGet key set. We dedupe so a callSid (or conversationSid)
+  // appearing on multiple rows only counts as one DDB key.
+  const keySet = new Set<string>();
+  const keyToCorrelation: Array<{ pk: string; correlationKey: string; type: 'CALL' | 'CONV' }> = [];
+  for (const conv of conversations) {
+    const callSid = conv.callSid as string | null | undefined;
+    const conversationSid = conv.conversationSid as string | null | undefined;
+    if (callSid) {
+      const pk = `TENANT#${tenantId}#ENRICHMENT#CALL#${callSid}`;
+      if (!keySet.has(pk)) {
+        keySet.add(pk);
+        keyToCorrelation.push({ pk, correlationKey: callSid, type: 'CALL' });
+      }
+    } else if (conversationSid) {
+      const pk = `TENANT#${tenantId}#ENRICHMENT#CONV#${conversationSid}`;
+      if (!keySet.has(pk)) {
+        keySet.add(pk);
+        keyToCorrelation.push({ pk, correlationKey: conversationSid, type: 'CONV' });
+      }
+    }
+  }
+  if (keyToCorrelation.length === 0) return conversations;
+
+  // BatchGetItem caps at 100 keys per call. Chunk to be safe for limit=500
+  // pages where we might exceed that.
+  const fieldsByCorrelation = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < keyToCorrelation.length; i += 100) {
+    const chunk = keyToCorrelation.slice(i, i + 100);
+    try {
+      const result = await docClient.send(new BatchGetCommand({
+        RequestItems: {
+          [TABLE_NAME]: {
+            Keys: chunk.map(c => ({ PK: c.pk, SK: 'META' })),
+            ProjectionExpression: 'correlationKey, correlationType, #f',
+            ExpressionAttributeNames: { '#f': 'fields' },
+          },
+        },
+      }));
+      const items = result.Responses?.[TABLE_NAME] ?? [];
+      for (const item of items) {
+        const key = `${item.correlationType as string}#${item.correlationKey as string}`;
+        const fields = item.fields;
+        if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+          fieldsByCorrelation.set(key, fields as Record<string, unknown>);
+        }
+      }
+    } catch (err) {
+      // Best-effort: if enrichment lookup fails, return rows unenriched. We
+      // don't want a transient DDB hiccup to fail the entire conversations
+      // query.
+      console.warn('Enrichment BatchGet failed (non-fatal)', err);
+      return conversations;
+    }
+  }
+
+  return conversations.map(conv => {
+    const callSid = conv.callSid as string | null | undefined;
+    const conversationSid = conv.conversationSid as string | null | undefined;
+    const lookupKey = callSid
+      ? `CALL#${callSid}`
+      : conversationSid
+        ? `CONV#${conversationSid}`
+        : null;
+    const liveFields = lookupKey ? fieldsByCorrelation.get(lookupKey) : undefined;
+    // Prefer the latest enrichment from DDB over whatever the spine cached at
+    // write time — the API result should always reflect the most recent POST.
+    if (liveFields) {
+      return { ...conv, enrichment: liveFields };
+    }
+    return conv;
+  });
 }
 
 /**
@@ -447,6 +574,7 @@ async function fetchConversationsByIds(
           callSid: payload.callSid ?? null,
           conversationSid: payload.conversationSid ?? null,
           referenceSids: payload.referenceSids ?? {},
+          enrichment: payload.enrichment ?? null,
           agentId: payload.agentId,
           teamId: payload.teamId,
           queueId: payload.queueId,
@@ -464,9 +592,10 @@ async function fetchConversationsByIds(
   const conversations = results.filter(Boolean) as Array<Record<string, unknown>>;
 
   // Enrich with operator fields if configured
-  if (hasOperatorFields && conversations.length > 0) {
-    return enrichWithOperatorFields(tenantId, conversations, fieldsConfig);
-  }
+  const operatorEnriched = hasOperatorFields && conversations.length > 0
+    ? await enrichWithOperatorFields(tenantId, conversations, fieldsConfig)
+    : conversations;
 
-  return conversations;
+  // Late-arrival enrichment merge.
+  return mergeEnrichment(tenantId, operatorEnriched);
 }

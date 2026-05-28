@@ -5,6 +5,15 @@ import {
   UpdateCommand,
   GetCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { writeIndexRecord } from './index-writer';
+
+// Comma-separated enrichment field names that get an inverse index record at
+// writeConversation time, making them filterable via ?<field>=<value> on the
+// conversations API. Empty by default — opt-in per deployment via CDK.
+const ENRICHMENT_FILTERABLE_FIELDS = (process.env.CIRL_ENRICHMENT_FILTERABLE_FIELDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -41,17 +50,86 @@ export function formatDate(date: Date = new Date()): string {
 }
 
 /**
- * Mask a phone number, keeping the country/area code prefix and the last 4
- * digits visible. E.g. "+5511976932682" → "+5511****2682". Short or unrecognized
- * inputs are returned as-is when there's nothing meaningful to mask.
+ * Look up an enrichment record by correlation key (callSid or conversationSid)
+ * and return its `fields` map. Returns null if the feature flag is off, the
+ * key is missing, no record exists, or any read error occurs — enrichment is
+ * always best-effort and never blocks the main write path.
+ *
+ * See docs/enrichment.md for the design rationale.
+ */
+async function fetchEnrichmentFields(
+  tenantId: string,
+  callSid: string | null,
+  conversationSid: string | null
+): Promise<Record<string, unknown> | null> {
+  if (process.env.CIRL_ENRICHMENT_ENABLED !== 'true') return null;
+  const correlationKey = callSid || conversationSid;
+  if (!correlationKey) return null;
+  const correlationType = callSid ? 'CALL' : 'CONV';
+
+  try {
+    const result = await docClient.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: `TENANT#${tenantId}#ENRICHMENT#${correlationType}#${correlationKey}`,
+        SK: 'META',
+      },
+      ProjectionExpression: '#f',
+      ExpressionAttributeNames: { '#f': 'fields' },
+    }));
+    const fields = result.Item?.fields;
+    if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+      return fields as Record<string, unknown>;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Enrichment lookup failed (non-fatal)', err);
+    return null;
+  }
+}
+
+/**
+ * Strip a SIP/tel URI down to just the user portion (typically an E.164
+ * number) so downstream logic doesn't have to think about the wrapper format.
+ * "sip:+553122980059@54.82.188.43" → "+553122980059"; bare E.164 unchanged.
+ */
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone || typeof phone !== 'string') return null;
+  return phone.replace(/^(?:sip|sips|tel):/i, '').split(/[@;?]/)[0];
+}
+
+/**
+ * Return just the last 4 digits of a phone number for support-lookup
+ * filtering. Operates after normalizePhone so SIP URIs work, and strips
+ * non-digit characters so any country/area-code formatting variation
+ * collapses to a stable suffix.
+ */
+function phoneLast4(phone: string | null | undefined): string | null {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+  const digits = normalized.replace(/\D/g, '');
+  return digits.length >= 4 ? digits.slice(-4) : null;
+}
+
+/**
+ * Mask a phone number, keeping the country/area-code prefix and the last 4
+ * digits visible. E.g. "+5511976932682" → "+5511****2682".
+ *
+ * SIP/tel URIs are normalized to the bare number first, so calls arriving as
+ * "sip:+553122980059@54.82.188.43" get masked as "+5531****0059" rather than
+ * exposing the SIP host or losing the country code to the URI prefix.
+ *
+ * Short or unrecognized inputs are returned without masking — there's nothing
+ * meaningful to hide when only a handful of digits are present.
  *
  * Phone numbers are PII; the raw value is still available inside the spine's
  * channel.participants[] payload for support tooling that genuinely needs it.
  */
 function maskPhone(phone: string | null | undefined): string | null {
-  if (!phone || typeof phone !== 'string') return null;
-  if (phone.length <= 9) return phone;
-  return `${phone.slice(0, 5)}${'*'.repeat(phone.length - 9)}${phone.slice(-4)}`;
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+  if (normalized.length <= 9) return normalized;
+  return `${normalized.slice(0, 5)}${'*'.repeat(normalized.length - 9)}${normalized.slice(-4)}`;
 }
 
 interface WriteConversationParams {
@@ -121,24 +199,68 @@ export async function writeConversation(params: WriteConversationParams): Promis
     p => p.role === 'Customer'
   )?.media_participant_id as string | undefined;
 
+  // Best-effort write-time enrichment merge. If a producer (Studio, customer
+  // backend, dispatcher, etc.) already POSTed enrichment for this call's
+  // correlation key, fold it into the spine now so consumers see it on the
+  // first read. Late-arriving enrichment is picked up by the API at read time
+  // instead — see docs/enrichment.md.
+  const callSid = refSids.call_sid ?? null;
+  const conversationSid = refSids.conversation_sid ?? null;
+  const enrichmentFields = await fetchEnrichmentFields(tenantId, callSid, conversationSid);
+
+  const customerPhoneLast4 = phoneLast4(customerRaw);
+
   // Build payload with entity-specific attributes (spine + payload pattern)
-  const payload = {
+  const payload: Record<string, unknown> = {
     ...existingPayload,
     customerKey: metadata.customerKey || null,
     channel: metadata.channel || 'unknown',
     sourceType: (mediaProps.source as string | undefined) ?? null,
     sourceSid: (mediaProps.source_sid as string | undefined) ?? null,
-    callSid: refSids.call_sid ?? null,
-    conversationSid: refSids.conversation_sid ?? null,
+    callSid,
+    conversationSid,
     referenceSids: refSids,
     // Masked customer phone for safe surfacing in dashboards/BI. The raw value
     // is still nested under channel.participants[] for tooling that needs it.
     customerPhone: maskPhone(customerRaw),
+    // Just the last 4 digits — exposes a filterable handle for support
+    // lookups ("find the customer whose number ends in 2682") without
+    // surfacing the full phone in query strings.
+    customerPhoneLast4,
     agentId: metadata.agentId || null,
     teamId: metadata.teamId || null,
     queueId: metadata.queueId || null,
     operatorCount: (existingPayload.operatorCount as number || 0) + 1,
   };
+  if (enrichmentFields) {
+    payload.enrichment = enrichmentFields;
+  } else if (existingPayload.enrichment) {
+    // Preserve previously-merged enrichment if a later lookup happens to fail.
+    payload.enrichment = existingPayload.enrichment;
+  }
+
+  // Write inverse index records that make spine-level fields filterable on
+  // the conversations API. Same PK pattern as the operator-config indexes;
+  // best-effort so a failed index write doesn't kill the spine update.
+  try {
+    if (customerPhoneLast4) {
+      await writeIndexRecord(tenantId, 'customer_phone_last4', customerPhoneLast4, conversationId, timestamp);
+    }
+    // For each enrichment field flagged as filterable, write an inverse
+    // index record. The merged value comes from the spine payload (already
+    // includes write-time enrichment merge results).
+    const enrichmentForIndex = (payload.enrichment as Record<string, unknown> | null | undefined) ?? null;
+    if (enrichmentForIndex) {
+      for (const fieldName of ENRICHMENT_FILTERABLE_FIELDS) {
+        const value = enrichmentForIndex[fieldName];
+        if (value !== null && value !== undefined && value !== '') {
+          await writeIndexRecord(tenantId, fieldName, String(value), conversationId, timestamp);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Index write failed (non-fatal)', err);
+  }
 
   // Use UpdateCommand to create or update conversation header
   await docClient.send(

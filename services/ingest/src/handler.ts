@@ -3,6 +3,7 @@ import { writeToS3 } from './s3-writer';
 import { emitEvent } from './event-emitter';
 import { validateTwilioSignature } from './validate-signature';
 import { fetchOperatorResults, fetchTranscript, fetchSentences, computeTimingMetrics } from './twilio-client';
+import { handleEnrichment } from './enrichment';
 import {
   TwilioCIWebhookPayload,
   CIWebhookPayload,
@@ -19,6 +20,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const requestId = event.requestContext.requestId;
 
   try {
+    // Route by API Gateway resource pattern. Webhook keeps its existing
+    // /webhook/ci path; enrichment lives at /enrichment when the feature
+    // flag is on (the route only exists in API Gateway when enabled).
+    // Both are write-side producer endpoints with no tenant in the path —
+    // tenant is resolved from CIRL_TENANT_ID at deploy time.
+    if (event.resource === '/enrichment') {
+      return handleEnrichment(event, requestId);
+    }
+
     // Parse and validate payload
     if (!event.body) {
       return response(HTTP_STATUS.BAD_REQUEST, { error: 'Missing request body' }, requestId);

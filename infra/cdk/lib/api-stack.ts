@@ -16,6 +16,11 @@ import * as fs from 'fs';
 export interface ApiStackProps extends cdk.StackProps {
   envName: string;
   authMode: 'none' | 'apikey';
+  /**
+   * When true, exposes POST /tenants/{tenantId}/enrichment and merges
+   * enrichment records into conversation responses. See docs/enrichment.md.
+   */
+  enrichmentEnabled?: boolean;
   rawBucket: s3.Bucket;
   table: dynamodb.Table;
   eventBus: events.EventBus;
@@ -31,6 +36,7 @@ export class ApiStack extends cdk.Stack {
     super(scope, id, props);
 
     const { envName, authMode, rawBucket, table, eventBus } = props;
+    const enrichmentEnabled = props.enrichmentEnabled === true;
 
     const servicesRoot = path.join(__dirname, '..', '..', '..', 'services');
 
@@ -63,6 +69,18 @@ export class ApiStack extends cdk.Stack {
       CONFIG_PREFIX: configPrefix,
       // Default tenant ID for single-tenant deployments
       ...(process.env.CIRL_TENANT_ID && { CIRL_TENANT_ID: process.env.CIRL_TENANT_ID }),
+      // Feature flag: enrichment endpoint + write/read-time merge.
+      // See docs/enrichment.md. Default off so existing deployments don't
+      // pay the extra DDB lookups.
+      CIRL_ENRICHMENT_ENABLED: enrichmentEnabled ? 'true' : 'false',
+      // Comma-separated list of enrichment field names that should be
+      // indexable via the conversations API filter (e.g. interaction_id).
+      // When set, the processor writes inverse index records at
+      // writeConversation time so ?<field>=<value> queries resolve O(1).
+      // Empty by default — opt-in per deployment.
+      ...(process.env.CIRL_ENRICHMENT_FILTERABLE_FIELDS && {
+        CIRL_ENRICHMENT_FILTERABLE_FIELDS: process.env.CIRL_ENRICHMENT_FILTERABLE_FIELDS,
+      }),
     };
 
     // Log groups for Lambdas
@@ -119,6 +137,12 @@ export class ApiStack extends cdk.Stack {
 
     rawBucket.grantWrite(this.ingestFunction);
     eventBus.grantPutEventsTo(this.ingestFunction);
+
+    // When enrichment is enabled, the ingest Lambda also writes ENRICHMENT
+    // records directly to the table. Granted unconditionally so the runtime
+    // feature-flag check is the only gate (avoids permission errors if the
+    // flag is flipped on without redeploying IAM).
+    table.grantWriteData(this.ingestFunction);
 
     // Processor Lambda - triggered by EventBridge, enriches, writes to DynamoDB
     this.processorFunction = new lambdaNode.NodejsFunction(this, 'ProcessorFunction', {
@@ -259,6 +283,27 @@ export class ApiStack extends cdk.Stack {
     views.addMethod('GET', dashboardIntegration, apiKeyMethodOptions);
     views.addMethod('POST', dashboardIntegration, apiKeyMethodOptions);
 
+    // /enrichment — top-level write endpoint, exposed only when the feature
+    // flag is on. Producer (Studio, Lambda, anything) POSTs callSid +
+    // arbitrary fields; CIRL stores them and merges into conversation
+    // responses. Routes to the ingest Lambda which dispatches by
+    // event.resource.
+    //
+    // Lives at the root (not under /tenants/{tenantId}) to mirror /webhook/ci
+    // — both are write-side endpoints called by external producers, and the
+    // single-tenant-per-deployment model means the tenant is implicit via
+    // CIRL_TENANT_ID. No tenantId in the path = simpler URL for producers
+    // (one less variable for Studio to template).
+    //
+    // Intentionally NOT behind apiKeyMethodOptions — same trust model as the
+    // /webhook/ci route. Twilio Studio's HTTP Request widget has very limited
+    // auth options. See docs/enrichment.md for the rationale.
+    if (enrichmentEnabled) {
+      const enrichmentIntegration = new apigateway.LambdaIntegration(this.ingestFunction);
+      const enrichment = this.api.root.addResource('enrichment');
+      enrichment.addMethod('POST', enrichmentIntegration);
+    }
+
     // Store API URL in SSM for easy reference
     new ssm.StringParameter(this, 'ApiUrlParameter', {
       parameterName: `/cirl/${envName}/api-url`,
@@ -276,6 +321,13 @@ export class ApiStack extends cdk.Stack {
       value: `${this.api.url}webhook/ci`,
       description: 'CI Webhook URL - configure this in your CI service',
     });
+
+    if (enrichmentEnabled) {
+      new cdk.CfnOutput(this, 'EnrichmentUrl', {
+        value: `${this.api.url}enrichment`,
+        description: 'Enrichment endpoint - POST callSid + fields to attach metadata to conversations',
+      });
+    }
 
     new cdk.CfnOutput(this, 'AuthMode', {
       value: authMode,

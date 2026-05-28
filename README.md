@@ -276,6 +276,14 @@ GET /tenants/{tenantId}/schemas
 GET /tenants/{tenantId}/schemas/{operatorName}/versions/{version}
 ```
 
+#### Enrichment (optional, behind feature flag)
+
+```http
+POST /enrichment
+```
+
+When `CIRL_ENRICHMENT_ENABLED=true`, lets upstream systems (Twilio Studio, customer backends, dispatchers) attach arbitrary metadata to a Twilio call by `callSid` or `conversationSid`. The metadata is merged into conversation API responses under an `enrichment` field. Same trust model as `/webhook/ci` — tenant is resolved from `CIRL_TENANT_ID` at deploy time, not in the path. See [docs/enrichment.md](docs/enrichment.md) for the full design, producer contract, and examples.
+
 ---
 
 ## BI Tool Integration
