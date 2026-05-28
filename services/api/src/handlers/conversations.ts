@@ -4,6 +4,7 @@ import {
   QueryCommand,
   QueryCommandInput,
   BatchGetCommand,
+  GetCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   ensureConfigLoaded,
@@ -512,11 +513,14 @@ async function queryByIndex(
 
   const result = await docClient.send(new QueryCommand(queryParams));
 
-  // Extract conversation IDs from index records
-  const conversationIds = (result.Items || []).map(item => item.conversationId as string);
-
-  // Fetch full conversation details + enrich with operator fields
-  const conversations = await fetchConversationsByIds(tenantId, conversationIds);
+  // Each index record carries the same SK as the conversation spine
+  // (TS#<timestamp>#CONV#<convId>). Use it directly to GetItem the spine
+  // rather than scanning the whole #CONV partition with a FilterExpression,
+  // which fails silently when the partition exceeds DynamoDB's 1MB per-page
+  // Query limit (the FilterExpression runs after the page is fetched, so the
+  // target conversation can fall past the cutoff and never be seen).
+  const indexItems = result.Items || [];
+  const conversations = await fetchConversationsBySpineSKs(tenantId, indexItems);
 
   const response: { items: unknown[]; nextToken?: string } = { items: conversations };
 
@@ -525,6 +529,77 @@ async function queryByIndex(
   }
 
   return response;
+}
+
+/**
+ * Fetch conversation spines using the SK from index records.
+ *
+ * Index records and spine records share the same SK format
+ * (TS#<timestamp>#CONV#<convId>), so we can issue precise GetItem calls
+ * instead of scanning the whole #CONV partition with a FilterExpression
+ * (which fails silently past DynamoDB's 1MB per-page Query limit).
+ *
+ * Runs enrichWithOperatorFields and mergeEnrichment on the result so the
+ * response shape matches the regular list path.
+ */
+async function fetchConversationsBySpineSKs(
+  tenantId: string,
+  indexItems: Array<Record<string, unknown>>
+): Promise<Array<Record<string, unknown>>> {
+  if (indexItems.length === 0) return [];
+
+  const fieldsConfig = getListSurfaceFields();
+  const hasOperatorFields = Object.keys(fieldsConfig).length > 0;
+  const spinePK = `TENANT#${tenantId}#CONV`;
+
+  const results = await Promise.all(
+    indexItems.map(async (idx) => {
+      const spineSK = idx.SK as string | undefined;
+      if (!spineSK) return null;
+      try {
+        const result = await docClient.send(
+          new GetCommand({
+            TableName: TABLE_NAME,
+            Key: { PK: spinePK, SK: spineSK },
+          })
+        );
+        if (!result.Item) return null;
+        const item = result.Item;
+        const payload = item.payload ? JSON.parse(item.payload as string) : {};
+        return {
+          conversationId: item.conversationId as string,
+          tenantId: item.tenantId as string,
+          customerKey: payload.customerKey,
+          customerPhone: payload.customerPhone ?? null,
+          customerPhoneLast4: payload.customerPhoneLast4 ?? null,
+          channel: payload.channel,
+          sourceType: payload.sourceType ?? null,
+          sourceSid: payload.sourceSid ?? null,
+          callSid: payload.callSid ?? null,
+          conversationSid: payload.conversationSid ?? null,
+          referenceSids: payload.referenceSids ?? {},
+          enrichment: payload.enrichment ?? null,
+          agentId: payload.agentId,
+          teamId: payload.teamId,
+          queueId: payload.queueId,
+          startedAt: item.startedAt,
+          operatorCount: payload.operatorCount,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const conversations = results.filter(Boolean) as Array<Record<string, unknown>>;
+
+  const operatorEnriched = hasOperatorFields && conversations.length > 0
+    ? await enrichWithOperatorFields(tenantId, conversations, fieldsConfig)
+    : conversations;
+
+  return mergeEnrichment(tenantId, operatorEnriched);
 }
 
 /**
@@ -568,6 +643,7 @@ async function fetchConversationsByIds(
           tenantId: item.tenantId as string,
           customerKey: payload.customerKey,
           customerPhone: payload.customerPhone ?? null,
+          customerPhoneLast4: payload.customerPhoneLast4 ?? null,
           channel: payload.channel,
           sourceType: payload.sourceType ?? null,
           sourceSid: payload.sourceSid ?? null,
