@@ -18,8 +18,9 @@
           "type": "enum",
           "metricPrefix": "poc_handoff",
           "displayName": "Transbordo",
-          "values": ["NONE", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"],
+          "values": ["NONE", "EARLY_TRANSFER_REQUEST", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"],
           "valueDisplayNames": {
+            "EARLY_TRANSFER_REQUEST": "Transferência Precoce",
             "CUSTOMER_REQUEST": "Solicitação do Cliente",
             "LACK_OF_COMPREHENSION": "Falta de Compreensão",
             "LACK_OF_KNOWLEDGE": "Falta de Conhecimento"
@@ -60,10 +61,11 @@
           "type": "enum",
           "metricPrefix": "poc_actual_csat",
           "displayName": "CSAT Real",
-          "values": ["YES", "NO", "NOT_ASKED"],
+          "values": ["YES", "NO", "NOT_ANSWERED", "NOT_ASKED"],
           "valueDisplayNames": {
             "YES": "Resolvido",
             "NO": "Não Resolvido",
+            "NOT_ANSWERED": "Não Respondido",
             "NOT_ASKED": "Não Perguntado"
           },
           "rateDenominator": "conversation_count",
@@ -75,6 +77,27 @@
           "metricPrefix": "poc_errors",
           "displayName": "Erros da IA",
           "surfaceInList": false
+        }
+      ]
+    },
+    {
+      "operatorName": "MVP - Inter - CSAT",
+      "displayName": "CSAT Real",
+      "metrics": [
+        {
+          "field": "actual_csat",
+          "type": "enum",
+          "metricPrefix": "poc_actual_csat",
+          "displayName": "CSAT Real",
+          "values": ["YES", "NO", "NOT_ANSWERED", "NOT_ASKED"],
+          "valueDisplayNames": {
+            "YES": "Resolvido",
+            "NO": "Não Resolvido",
+            "NOT_ANSWERED": "Não Respondido",
+            "NOT_ASKED": "Não Perguntado"
+          },
+          "rateDenominator": "conversation_count",
+          "surfaceInList": true
         }
       ]
     },
