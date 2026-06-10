@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "description": "Per-tenant configuration. Drives ingest-time decisions like which Conversational Intelligence version (v2 / v3) a tenant's webhooks come from. Ships to S3 alongside operator-metrics.json on every cdk deploy.",
+  "tenants": {
+    "inter-mvp": { "ciVersion": "v2" },
+    "btg-mvp": { "ciVersion": "v3" },
+    "cintelv3": { "ciVersion": "v3"}
+  },
+  "defaults": { "ciVersion": "v2" }
+}

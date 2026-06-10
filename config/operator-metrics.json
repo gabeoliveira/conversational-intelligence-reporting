@@ -148,6 +148,106 @@
           "surfaceInList": false
         }
       ]
+    },
+    {
+      "operatorName": "AI Analytics",
+      "displayName": "Análise da IA",
+      "aggregateOnTriggers": ["CONVERSATION_END"],
+      "metrics": [
+        {
+          "field": "ai_retained",
+          "type": "boolean",
+          "metricPrefix": "ai_analytics_retained",
+          "displayName": "Retenção da IA",
+          "surfaceInList": false
+        },
+        {
+          "field": "back_to_ivr",
+          "type": "boolean",
+          "metricPrefix": "ai_analytics_back_to_ivr",
+          "displayName": "Retorno à URA",
+          "surfaceInList": false
+        },
+        {
+          "field": "errors",
+          "type": "boolean",
+          "metricPrefix": "ai_analytics_errors",
+          "displayName": "Erros da IA",
+          "surfaceInList": false
+        },
+        {
+          "field": "inferred_csat",
+          "type": "integer",
+          "metricPrefix": "ai_analytics_csat",
+          "displayName": "CSAT",
+          "min": 1,
+          "max": 5,
+          "distribution": true,
+          "surfaceInList": true
+        },
+        {
+          "field": "actual_csat",
+          "type": "enum",
+          "metricPrefix": "ai_analytics_actual_csat",
+          "displayName": "CSAT Real",
+          "values": ["YES", "NO", "NOT_ASKED"],
+          "valueDisplayNames": {
+            "YES": "Resolvido",
+            "NO": "Não Resolvido",
+            "NOT_ASKED": "Não Perguntado"
+          },
+          "rateDenominator": "conversation_count",
+          "surfaceInList": true
+        },
+        {
+          "field": "handoff_reason",
+          "type": "enum",
+          "metricPrefix": "ai_analytics_handoff",
+          "displayName": "Transbordo",
+          "values": ["NONE", "CUSTOMER_REQUEST", "LACK_OF_COMPREHENSION", "LACK_OF_KNOWLEDGE"],
+          "valueDisplayNames": {
+            "CUSTOMER_REQUEST": "Solicitação do Cliente",
+            "LACK_OF_COMPREHENSION": "Falta de Compreensão",
+            "LACK_OF_KNOWLEDGE": "Falta de Conhecimento"
+          },
+          "ignoreValues": ["NONE"],
+          "rateDenominator": "conversation_count",
+          "surfaceInList": true
+        },
+        {
+          "field": "topics",
+          "type": "category_array",
+          "metricPrefix": "ai_analytics_topic",
+          "displayName": "Tópico",
+          "categoryField": "primary_topic",
+          "subcategoryField": "subtopic",
+          "subcategoryPrefix": "ai_analytics_subtopic",
+          "surfaceInList": true
+        }
+      ]
+    },
+    {
+      "operatorName": "CEP Lookup",
+      "displayName": "Consulta de CEP",
+      "aggregateOnTriggers": ["CONVERSATION_END"],
+      "metrics": [
+        {
+          "field": "lookups",
+          "type": "category_array",
+          "metricPrefix": "cep_lookup_status",
+          "displayName": "CEP — Status",
+          "categoryField": "status",
+          "surfaceInList": false
+        },
+        {
+          "field": "lookups",
+          "type": "category_array",
+          "metricPrefix": "cep_lookup_uf",
+          "displayName": "CEP — UF",
+          "categoryField": "uf",
+          "surfaceInList": false
+        }
+      ]
     }
   ]
 }

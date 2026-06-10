@@ -1,7 +1,9 @@
-// Mock dynamo incrementMetric
+// Mock dynamo incrementMetric + claimOperatorConversationSlot
 const mockIncrementMetric = jest.fn().mockResolvedValue(undefined);
+const mockClaimOperatorConversationSlot = jest.fn().mockResolvedValue(true);
 jest.mock('../storage/dynamo', () => ({
   incrementMetric: mockIncrementMetric,
+  claimOperatorConversationSlot: mockClaimOperatorConversationSlot,
 }));
 
 // Mock DynamoDB for index writes
@@ -619,6 +621,120 @@ describe('aggregation-engine', () => {
       const expectedMax = after + 180 * 86400;
       expect(ttl).toBeGreaterThanOrEqual(expectedMin);
       expect(ttl).toBeLessThanOrEqual(expectedMax);
+    });
+  });
+
+  describe('aggregateOnTriggers (v3 trigger filter)', () => {
+    const triggerConfig: OperatorConfig = {
+      operatorName: 'TriggerOp',
+      displayName: 'Trigger Op',
+      aggregateOnTriggers: ['CONVERSATION_END'],
+      metrics: [
+        {
+          field: 'passed',
+          type: 'boolean',
+          metricPrefix: 'trg_passed',
+          displayName: 'Passed',
+        },
+      ],
+    };
+
+    it('aggregates when trigger matches the allow-list', async () => {
+      mockGetOperatorConfig.mockReturnValue(triggerConfig);
+      const result = await aggregateFromConfig(
+        't', '20260127', 'TriggerOp', 'C1', { passed: true }, 'CONVERSATION_END'
+      );
+      expect(result).toBe(true);
+      expect(mockIncrementMetric).toHaveBeenCalled();
+    });
+
+    it('skips aggregation when trigger is not in the allow-list', async () => {
+      mockGetOperatorConfig.mockReturnValue(triggerConfig);
+      const result = await aggregateFromConfig(
+        't', '20260127', 'TriggerOp', 'C1', { passed: true }, 'COMMUNICATION'
+      );
+      expect(result).toBe(false);
+      expect(mockIncrementMetric).not.toHaveBeenCalled();
+    });
+
+    it('falls through when trigger is null/undefined (v2 events bypass the filter)', async () => {
+      mockGetOperatorConfig.mockReturnValue(triggerConfig);
+      const result = await aggregateFromConfig(
+        't', '20260127', 'TriggerOp', 'C1', { passed: true }
+        // trigger omitted — v2 behavior
+      );
+      expect(result).toBe(true);
+      expect(mockIncrementMetric).toHaveBeenCalled();
+    });
+
+    it('aggregates normally when aggregateOnTriggers is absent', async () => {
+      mockGetOperatorConfig.mockReturnValue({
+        ...triggerConfig,
+        aggregateOnTriggers: undefined,
+      });
+      const result = await aggregateFromConfig(
+        't', '20260127', 'TriggerOp', 'C1', { passed: true }, 'COMMUNICATION'
+      );
+      expect(result).toBe(true);
+      expect(mockIncrementMetric).toHaveBeenCalled();
+    });
+  });
+
+  describe('dedupBy: "conversation"', () => {
+    const dedupConfig: OperatorConfig = {
+      operatorName: 'DedupOp',
+      displayName: 'Dedup Op',
+      dedupBy: 'conversation',
+      metrics: [
+        {
+          field: 'passed',
+          type: 'boolean',
+          metricPrefix: 'dd_passed',
+          displayName: 'Passed',
+        },
+      ],
+    };
+
+    it('aggregates on first sight (slot claimed)', async () => {
+      mockGetOperatorConfig.mockReturnValue(dedupConfig);
+      mockClaimOperatorConversationSlot.mockResolvedValueOnce(true);
+      const result = await aggregateFromConfig(
+        't', '20260127', 'DedupOp', 'C1', { passed: true }, 'COMMUNICATION'
+      );
+      expect(result).toBe(true);
+      expect(mockClaimOperatorConversationSlot).toHaveBeenCalledWith(
+        't', '20260127', 'DedupOp', 'C1'
+      );
+      expect(mockIncrementMetric).toHaveBeenCalled();
+    });
+
+    it('skips aggregation when slot already claimed', async () => {
+      mockGetOperatorConfig.mockReturnValue(dedupConfig);
+      mockClaimOperatorConversationSlot.mockResolvedValueOnce(false);
+      const result = await aggregateFromConfig(
+        't', '20260127', 'DedupOp', 'C1', { passed: true }, 'COMMUNICATION'
+      );
+      expect(result).toBe(false);
+      expect(mockIncrementMetric).not.toHaveBeenCalled();
+    });
+
+    it('does not call claimOperatorConversationSlot when dedupBy is absent', async () => {
+      mockGetOperatorConfig.mockReturnValue({ ...dedupConfig, dedupBy: undefined });
+      await aggregateFromConfig('t', '20260127', 'DedupOp', 'C1', { passed: true });
+      expect(mockClaimOperatorConversationSlot).not.toHaveBeenCalled();
+    });
+
+    it('applies trigger filter BEFORE attempting to claim a slot', async () => {
+      mockGetOperatorConfig.mockReturnValue({
+        ...dedupConfig,
+        aggregateOnTriggers: ['CONVERSATION_END'],
+      });
+      const result = await aggregateFromConfig(
+        't', '20260127', 'DedupOp', 'C1', { passed: true }, 'COMMUNICATION'
+      );
+      expect(result).toBe(false);
+      expect(mockClaimOperatorConversationSlot).not.toHaveBeenCalled();
+      expect(mockIncrementMetric).not.toHaveBeenCalled();
     });
   });
 });

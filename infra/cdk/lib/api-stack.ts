@@ -136,6 +136,9 @@ export class ApiStack extends cdk.Stack {
     });
 
     rawBucket.grantWrite(this.ingestFunction);
+    // Ingest reads tenants.json + operator-metrics.json from the same bucket
+    // at cold start (ensureConfigLoaded) to pick the per-tenant CI adapter.
+    rawBucket.grantRead(this.ingestFunction);
     eventBus.grantPutEventsTo(this.ingestFunction);
 
     // When enrichment is enabled, the ingest Lambda also writes ENRICHMENT

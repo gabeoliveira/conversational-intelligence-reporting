@@ -396,6 +396,42 @@ export async function updateAggregates(params: UpdateAggregatesParams): Promise<
 }
 
 /**
+ * Conditional dedup marker for per-(operator, conversation, day) aggregation.
+ * Returns true if this is the first time we see this triple (caller should
+ * proceed to aggregate). Returns false if a marker already existed (caller
+ * should skip aggregation — the conversation was already counted by an
+ * earlier webhook fire).
+ *
+ * Used by aggregateFromConfig when an operator declares dedupBy: "conversation"
+ * — typically v3 operators wired to a rule that fires per-message but whose
+ * metric should still count one observation per conversation.
+ */
+export async function claimOperatorConversationSlot(
+  tenantId: string,
+  date: string,
+  operatorName: string,
+  conversationId: string
+): Promise<boolean> {
+  const markerKey = {
+    PK: `TENANT#${tenantId}#OP_SEEN#${date}#${operatorName}`,
+    SK: `CONV#${conversationId}`,
+  };
+  try {
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: { ...markerKey, ttl: Math.floor(Date.now() / 1000) + 86400 * 7 },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+    return true;
+  } catch (error: any) {
+    if (error.name === 'ConditionalCheckFailedException') return false;
+    throw error;
+  }
+}
+
+/**
  * Aggregate timing metrics from transcript sentences.
  * These are computed by the ingest Lambda from Twilio sentence data and passed
  * through EventBridge metadata. We track sums and counts for averaging in the API.

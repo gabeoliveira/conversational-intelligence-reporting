@@ -93,13 +93,40 @@ export type MetricDefinition =
 // Operator config
 // ============================================================================
 
+/**
+ * Conversational Intelligence v3 rule trigger. Carried on the canonical
+ * IntelligenceEvent for v3 webhooks; absent for v2 (which only fires
+ * post-transcript, once per conversation).
+ */
+export type IntelligenceTrigger =
+  | 'COMMUNICATION'
+  | 'CONVERSATION_INACTIVE'
+  | 'CONVERSATION_END';
+
 export interface OperatorConfig {
-  /** Operator name as it appears in Twilio (FriendlyName) */
+  /** Operator name as it appears in Twilio (FriendlyName / displayName) */
   operatorName: string;
   /** Twilio operator SID (stable identifier, optional for matching) */
   operatorSid?: string;
   /** Human-readable name for this operator */
   displayName: string;
+  /**
+   * v3 only — restrict aggregation to results produced by a rule with one of
+   * these triggers. Storage of the operator result still happens regardless.
+   * Absent ⇒ aggregate on every fire (v2 behavior).
+   *
+   * Use for operators whose rule fires per-message but whose metric only
+   * makes sense once per conversation (e.g. CSAT scored only at end).
+   */
+  aggregateOnTriggers?: IntelligenceTrigger[];
+  /**
+   * Per-conversation aggregation dedup. When set to "conversation", a given
+   * (operator, conversationId) tuple only contributes once to aggregates,
+   * even if the rule fires multiple times. Independent of aggregateOnTriggers
+   * — use this when the rule MUST fire multiple times but you want metrics
+   * to count conversations, not events.
+   */
+  dedupBy?: 'conversation';
   /** Metric definitions for this operator's output fields */
   metrics: MetricDefinition[];
 }

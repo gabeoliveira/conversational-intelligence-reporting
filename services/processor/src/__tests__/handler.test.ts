@@ -170,13 +170,15 @@ describe('processor handler', () => {
   it('calls both config-driven and generic aggregation', async () => {
     await handler(makeEvent());
 
-    // Config-driven engine called for operator-specific metrics
+    // Config-driven engine called for operator-specific metrics.
+    // 6th arg is the v3 rule trigger; undefined for v2 events.
     expect(mockAggregateFromConfig).toHaveBeenCalledWith(
       'test-tenant',
       '20260127',
       'test-operator',
       'C1',
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
 
     // Generic updateAggregates always called (operator count + conversation dedup)

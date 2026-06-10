@@ -19,6 +19,7 @@ export async function handler(
     s3Uri,
     receivedAt,
     metadata,
+    trigger,
   } = detail;
 
   console.log(`Processing: tenant=${tenantId}, conversation=${conversationId}, operator=${operatorName}`);
@@ -92,7 +93,7 @@ export async function handler(
     // 8. Update aggregates
     // Config-driven: operator-specific metrics from config
     const configDate = formatDate(new Date(receivedAt));
-    await aggregateFromConfig(tenantId, configDate, operatorName, conversationId, enrichedPayload);
+    await aggregateFromConfig(tenantId, configDate, operatorName, conversationId, enrichedPayload, trigger);
 
     // Generic: operator count + conversation count dedup (always runs)
     await updateAggregates({

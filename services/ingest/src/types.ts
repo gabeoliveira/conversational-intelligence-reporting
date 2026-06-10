@@ -64,10 +64,14 @@ export interface TwilioOperatorResultsResponse {
  * Legacy/custom webhook payload format (for testing or custom integrations)
  */
 export interface CIWebhookPayload {
+  /** Adapter version that produced this normalized payload. Default 'v2' for legacy records. */
+  ciVersion?: CiVersion;
   conversationId: string;
   operatorName: string;
   schemaVersion?: string;
   timestamp: string;
+  /** v3 only — rule trigger that fired this execution. */
+  trigger?: IntelligenceTrigger | null;
   data: Record<string, unknown>;
   metadata?: {
     customerKey?: string;
@@ -77,7 +81,29 @@ export interface CIWebhookPayload {
     queueId?: string;
     [key: string]: unknown;
   };
+  /** v2-only — top-level timing metrics derived from transcript sentences. */
+  timingMetrics?: Record<string, unknown>;
+  /** v2-only — original transcript SID, kept at top level for downstream consumers. */
+  transcriptSid?: string;
+  /** v2-only — operator SID. */
+  operatorSid?: string;
+  /** v2-only — operator type identifier from the Twilio CI service. */
+  operatorType?: string;
+  _meta?: {
+    tenantId: string;
+    receivedAt: string;
+    requestId: string;
+  };
 }
+
+/** Conversational Intelligence version this payload was emitted by. */
+export type CiVersion = 'v2' | 'v3';
+
+/** v3 rule trigger; null/absent for v2. */
+export type IntelligenceTrigger =
+  | 'COMMUNICATION'
+  | 'CONVERSATION_INACTIVE'
+  | 'CONVERSATION_END';
 
 export interface PayloadReceivedEvent {
   tenantId: string;
@@ -86,6 +112,10 @@ export interface PayloadReceivedEvent {
   schemaVersion: string;
   s3Uri: string;
   receivedAt: string;
+  /** Adapter version. Absent in legacy records — treat as 'v2'. */
+  ciVersion?: CiVersion;
+  /** v3 rule trigger that fired this execution. */
+  trigger?: IntelligenceTrigger | null;
   metadata?: Record<string, unknown>;
 }
 

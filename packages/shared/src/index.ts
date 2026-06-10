@@ -5,3 +5,4 @@ export * from './operator-config';
 export * from './config-loader';
 export * from './config-derived';
 export * from './s3-config';
+export * from './tenant-config';

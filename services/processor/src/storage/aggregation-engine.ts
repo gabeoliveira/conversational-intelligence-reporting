@@ -6,7 +6,7 @@
  *
  * Usage:
  *   import { aggregateFromConfig } from './aggregation-engine';
- *   await aggregateFromConfig(tenantId, date, operatorName, payload);
+ *   await aggregateFromConfig(tenantId, date, operatorName, conversationId, payload, trigger);
  */
 
 import type {
@@ -17,27 +17,52 @@ import type {
   CategoryMetric,
   EnumMetric,
   CategoryArrayMetric,
+  IntelligenceTrigger,
 } from '@cirl/shared';
 import { getOperatorConfig } from '@cirl/shared';
 
 // Import incrementMetric from dynamo.ts — shared write function
-import { incrementMetric } from './dynamo';
+import { incrementMetric, claimOperatorConversationSlot } from './dynamo';
 import { writeIndexRecord } from './index-writer';
 
 /**
  * Aggregate metrics for an operator based on its config.
  * Also writes index records for fields marked surfaceInList.
- * Returns true if a config was found and processed, false if no config exists.
+ *
+ * For v3 events the caller passes the rule `trigger`; v2 events pass null/undefined.
+ * Two opt-in operator-config knobs filter what gets counted:
+ *
+ *   - aggregateOnTriggers: only aggregate when the trigger is in the list
+ *     (storage of the operator result still happens upstream).
+ *   - dedupBy: 'conversation': only the first fire per (operator, conversation,
+ *     day) contributes. Backed by a marker record in DDB.
+ *
+ * Returns true if metrics were written, false if no config existed OR if
+ * the trigger/dedup gate filtered this fire out.
  */
 export async function aggregateFromConfig(
   tenantId: string,
   date: string,
   operatorName: string,
   conversationId: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  trigger?: IntelligenceTrigger | null
 ): Promise<boolean> {
   const config = getOperatorConfig(operatorName);
   if (!config) return false;
+
+  // Trigger filter: v3-only. v2 events (no trigger) always pass through —
+  // matches the prior behavior where every fire aggregated unconditionally.
+  if (config.aggregateOnTriggers && trigger && !config.aggregateOnTriggers.includes(trigger)) {
+    return false;
+  }
+
+  // Per-(operator, conversation, day) dedup. Marker is conditional-put;
+  // a return of false means another fire already claimed this slot today.
+  if (config.dedupBy === 'conversation') {
+    const claimed = await claimOperatorConversationSlot(tenantId, date, operatorName, conversationId);
+    if (!claimed) return false;
+  }
 
   for (const metric of config.metrics) {
     const value = extractField(payload, metric);

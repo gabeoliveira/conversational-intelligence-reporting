@@ -144,7 +144,25 @@ CirlDemoApiStack.WebhookUrl = https://xxx.execute-api.us-east-1.amazonaws.com/v1
 
 ### 4. Configure Twilio CI Webhook
 
-Set the webhook URL in your Twilio Voice Intelligence service configuration to point to the `WebhookUrl` from above.
+Set the webhook URL in your Twilio Voice Intelligence configuration to point to the
+`WebhookUrl` from above. Both Conversational Intelligence versions are supported:
+
+- **v2 (classic)** — point your CI Service's webhook at the URL. Default behavior; no extra
+  configuration needed.
+- **v3** — point your Intelligence Configuration's Rule webhook action at the URL, then
+  declare the tenant's version in [`config/tenants.json`](config/tenants.json):
+
+  ```json
+  {
+    "tenants": {
+      "btg-mvp": { "ciVersion": "v3" }
+    },
+    "defaults": { "ciVersion": "v2" }
+  }
+  ```
+
+  See [docs/v3-adapter.md](docs/v3-adapter.md) for the full v3 architecture, field mapping,
+  signing model, and migration steps.
 
 ### 5. Test with Sample Data
 
@@ -420,9 +438,16 @@ Supported primitive types:
 | `enum` | `{prefix}_{value}`, `{prefix}_total` | `{prefix}_{value}_rate_percent` | Fixed-set classifications (handoff reasons) |
 | `category_array` | `{prefix}_{category}`, `{subcategoryPrefix}_{combined}` | — | Multi-topic conversations |
 
-Additional options: `distribution` (track per-value buckets), `ignoreValues` (skip specific enum values), `min`/`max` (sanity checks), `surfaceInList` (include in conversations list enrichment).
+Additional per-metric options: `distribution` (track per-value buckets), `ignoreValues` (skip specific enum values), `min`/`max` (sanity checks), `surfaceInList` (include in conversations list enrichment).
 
-See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the full design.
+Per-operator options (v3-aware — no-ops for v2 since v2 has no trigger):
+
+| Option | What it does |
+|---|---|
+| `aggregateOnTriggers: ["CONVERSATION_END"]` | Only aggregate when the firing rule's trigger matches. Storage of the operator result still happens regardless. Use for operators that fire per-message but whose metric only makes sense at the end of the conversation. |
+| `dedupBy: "conversation"` | Aggregate only the first fire per `(operator, conversation, day)`; subsequent fires are silently skipped. Composes with the trigger filter. Use when the operator must fire per-message but the metric should count conversations, not events. |
+
+See [docs/config-driven-metrics-plan.md](docs/config-driven-metrics-plan.md) for the original config design and [docs/v3-adapter.md](docs/v3-adapter.md) for the v3 trigger/dedup semantics.
 
 ---
 

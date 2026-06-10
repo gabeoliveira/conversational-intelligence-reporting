@@ -8,6 +8,7 @@
 
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { initializeConfig } from './config-loader';
+import { initializeTenantsConfig } from './tenant-config';
 
 const s3Client = new S3Client({});
 let configLoaded = false;
@@ -28,25 +29,31 @@ export async function ensureConfigLoaded(): Promise<void> {
     return;
   }
 
-  try {
-    const response = await s3Client.send(new GetObjectCommand({
-      Bucket: bucket,
-      Key: `${prefix}operator-metrics.json`,
-    }));
-
-    const body = await response.Body?.transformToString();
-    if (body) {
-      initializeConfig(body);
-    }
-  } catch (error: any) {
-    if (error.name === 'NoSuchKey') {
-      console.warn('operator-metrics.json not found in S3 — config-driven metrics disabled');
-    } else {
-      console.error('Failed to load operator metrics config from S3:', error);
-    }
-  }
+  await Promise.all([
+    loadAndInit(bucket, `${prefix}operator-metrics.json`, initializeConfig, 'operator-metrics.json'),
+    loadAndInit(bucket, `${prefix}tenants.json`, initializeTenantsConfig, 'tenants.json'),
+  ]);
 
   configLoaded = true;
+}
+
+async function loadAndInit(
+  bucket: string,
+  key: string,
+  init: (body: string) => unknown,
+  label: string
+): Promise<void> {
+  try {
+    const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const body = await response.Body?.transformToString();
+    if (body) init(body);
+  } catch (error: any) {
+    if (error.name === 'NoSuchKey') {
+      console.warn(`${label} not found in S3 — falling back to defaults`);
+    } else {
+      console.error(`Failed to load ${label} from S3:`, error);
+    }
+  }
 }
 
 /**
